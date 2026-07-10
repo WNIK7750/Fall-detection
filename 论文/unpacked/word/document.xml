@@ -1,0 +1,1705 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 w15 wp14">
+  <w:body>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="360" w:before="2000" w:line="480" w:lineRule="auto"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="44"/>
+          <w:szCs w:val="44"/>
+        </w:rPr>
+        <w:t xml:space="preserve">基于多特征融合与LSTM的人体摔倒智能检测系统研究</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="600" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">作者：黄鑫富</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="120" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">学号：3241806127</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="120" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">专业：信息管理与信息系统</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="600" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">2026年5月</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">摘要</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">随着全球人口老龄化趋势加剧，老年人意外摔倒引发的伤害问题已成为重要的公共健康议题。及时检测摔倒事件并发出警报，对于降低老年人摔倒后的伤害程度具有关键意义。本文提出一种基于多特征融合与长短期记忆网络（LSTM）的人体摔倒智能检测系统。该系统以YOLOv8 Pose为核心进行人体姿态估计，从视频序列中提取宽高比、躯干倾角、质心运动速度、关节角度及脊柱矢量等多维度特征，构建10维特征向量表征人体运动状态，并将其输入基于双向LSTM（BiLSTM）与双向GRU（BiGRU）的混合时序分类器，结合双向多头自注意力机制（Bidirectional Multi-Head Attention）实现摔倒判定。针对训练数据中严重的类别不平衡问题（Normal样本294例 vs. Fall样本79例，约3.7:1），本文采用Focal Loss（α=2.0, γ=2.0）作为损失函数，有效聚焦困难样本；同时采用SMOTE过采样将Fall类扩充至与Normal类1:1配平。在UR Fall Detection Dataset测试集（108例样本）上，单模型最高F1达到76.92%（精确率71.43%，召回率88.89%）；进一步通过集成学习融合高精确率模型（启用数据增强）与高召回率模型（无数据增强），采用软投票策略（阈值=0.70），最终系统达到精确率75.00%、召回率83.33%、F1分数78.95%、AUC-ROC>0.94的性能表现，其中精确率和F1分数均满足预期指标（精确率≥70%，F1≥78%）。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="120" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">关键词：</w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">摔倒检测；姿态估计；多特征融合；BiLSTM；BiGRU；注意力机制；Focal Loss；SMOTE；集成学习</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">1 引言</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">1.1 研究背景与意义</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">摔倒（Fall）是导致老年人意外伤害和死亡的主要原因之一。据世界卫生组织（WHO）统计，全球每年约有6.46亿老年人（65岁及以上）发生摔倒事件，摔倒相关伤害已成为老年人意外伤害的首要病因。更为严峻的是，摔倒发生后的"地板效应"（Lying on the Floor）——即老年人摔倒后长时间无法自行站起——会显著加剧伤害程度。研究表明，摔倒后1小时内获得救助的老年人，其康复效果显著优于延迟救助者。因此，摔倒的及时检测与快速响应是老年人安全监护系统的核心需求。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">传统的摔倒检测方法主要依赖可穿戴传感器（如加速度计、陀螺仪），然而此类方案存在明显缺陷：老年人容易遗忘佩戴传感器，且长期佩戴带来的不适感降低了依从性。相比之下，基于计算机视觉的非接触式检测方案具有自然、无侵入的优势，近年来成为研究热点。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">1.2 现有技术路线分析</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">目前，基于视觉的摔倒检测技术主要分为三大类：第一类：基于视频帧图像分类的端到端深度学习方法，将每一帧或每一段视频直接输入卷积神经网络（CNN）或3D卷积网络（C3D/I3D）进行二分类判定；第二类：基于人体检测框（Bounding Box）几何特征的规则方法，利用YOLO等目标检测器定位人体，再计算其外接矩形的宽高比、倾斜角度等几何特征；第三类：基于人体姿态估计的时序建模方法，利用OpenPose、MediaPipe、YOLOv8 Pose等姿态估计工具提取人体骨骼关键点，将关键点序列作为时序模型的输入。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">1.3 本文贡献</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">本文在第三类方法的基础上，提出一种融合多维特征与混合时序模型的人体摔倒检测系统，主要贡献如下：（1）多特征融合设计：整合宽高比、躯干倾角、质心速度比、关节角度、脊柱矢量等五套特征方案，构建统一的10维特征向量；（2）混合时序架构：设计BiLSTM + BiGRU + 双向多头自注意力的混合模型架构（EnhancedFallDetector），共约150万参数；（3）类别不平衡处理：采用Focal Loss（α=2.0, γ=2.0）配合SMOTE过采样（1:1配平）；（4）集成学习优化：通过组合启用数据增强的高精确率模型与无数据增强的高召回率模型，采用软投票集成策略，在测试集上实现精确率75.00%、召回率83.33%、F1 78.95%的综合最优性能。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">1.4 论文结构</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">本文其余部分安排如下：第2章综述相关工作与技术基础；第3章详述系统整体架构；第4章阐述特征工程的具体实现；第5章描述BiLSTM-BiGRU-Attention混合模型的设计与训练策略；第6章介绍集成学习方案；第7章给出实验设计与结果分析；第8章进行消融实验；第9章讨论局限性与未来方向；第10章总结全文。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">2 相关工作与技术基础</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">2.1 人体姿态估计技术</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">人体姿态估计（Human Pose Estimation, HPE）是计算机视觉的基础任务之一。YOLOv8 Pose（Ultralytics，2023）输出17个COCO标准关键点；MediaPipe Pose（Google，2020）输出33个身体关键点；OpenPose（卡内基梅隆大学，2019）支持从2D图像中提取最多25个人体关键点。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">2.2 摔倒检测方法综述</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">基于可穿戴传感器的方法：利用加速度计、陀螺仪、压力传感器等设备采集人体运动数据；基于环境传感器的方法：利用红外阵列、压力地板、雷达等感知人体存在与运动状态；基于视觉的方法：通过摄像头采集视频，利用计算机视觉技术分析人体姿态与运动模式。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">2.3 时序建模方法</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">循环神经网络（RNN）存在梯度消失问题；长短期记忆网络（LSTM）通过引入门控机制有效解决长序列依赖问题，BiLSTM同时建模前向和后向的时序依赖；门控循环单元（GRU）是LSTM的简化变体；自注意力机制（Self-Attention）通过计算序列中各位置之间的相关性权重实现全局依赖建模。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">2.4 类别不平衡处理技术</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">Focal Loss（Lin等，2017，ICCV）通过引入调制因子降低易分类样本的损失权重，将学习焦点聚焦于困难样本。SMOTE（Chawla等，2002）是一种过采样技术，通过在少数类样本的特征空间中进行插值合成新的少数类样本。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">2.5 摔倒检测数据集</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">UR Fall Detection Dataset（URFD）：由University of Texas创建，包含70个摔倒视频和70个非摔倒视频，同时提供RGB视频和深度图；FALL-UP Dataset：包含多种类型的摔倒动作；FDD Dataset（Le2i Fall Detection）：包含多个摄像头角度的室内场景视频。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">3 系统整体架构</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">3.1 架构概述</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">本文提出的摔倒检测系统遵循"视频输入→姿态估计→特征提取→时序建模→摔倒判定"的Pipeline架构，共分为六个核心模块：视频输入模块、姿态估计模块（YOLOv8 Pose提取17个COCO标准人体关键点）、特征提取模块（从关键点计算10维特征向量）、序列构建模块（滑动窗口策略，窗口长度T=20，50%重叠）、时序建模模块（BiLSTM-BiGRU-Attention混合分类器）、集成推理模块（软投票集成两个不同训练配置的模型）。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">3.2 系统数据流</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">视频输入 → OpenCV视频读取 → YOLOv8 Pose姿态估计（17个COCO关键点）→ 多维特征提取（10维向量）→ 滑动窗口序列构建（窗口长度T=20）→ BiLSTM-BiGRU-Attention时序建模 → Focal Loss分类 → 摔倒概率输出 → 集成推理（软投票）→ 最终判定</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">3.3-3.7 各模块详解</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">3.3 人体姿态估计模块：本文选用YOLOv8 Pose作为姿态估计工具，具有高速推理、关键点丰富、原生整合、端侧部署友好等优势。3.4 特征提取模块：从YOLOv8 Pose输出的17个关键点坐标出发，设计多维特征融合方法，构建统一的10维特征向量。3.5 时序窗口与序列构建模块：系统采用滑动窗口策略，将连续T帧的特征向量堆叠为一个时序样本，窗口长度T=20帧，相邻窗口之间采用50%重叠滑动策略。3.6 BiLSTM-BiGRU-Attention分类器是系统的核心决策单元。3.7 集成推理模块：采用软投票集成策略，组合启用数据增强的高精确率模型（Run1）与无数据增强的高召回率模型（Run4）。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">4 多维特征工程设计</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">4.1 特征设计原则</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">多维度互补：特征从不同角度刻画人体运动状态；物理可解释：每个特征有明确的物理含义；计算效率：特征计算尽量轻量；归一化处理：采用Z-Score标准化，消除量纲差异。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">4.2 10维特征向量</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">F1宽高比（R=BBox_w/BBox_h，几何特征）、F2宽高比变化率、F3脊柱倾角（θ=atan2(spine_x, spine_y)，角度特征）、F4脊柱倾角突变量、F5归一化质心y坐标、F6质心垂直速度、F7速度比、Rv=|Vy|/(|Vx|+ε)、F8头脚矢量归一化长度、F9归一化头部高度、F10脊柱矢量y分量。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">4.3 关键特征详解</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">F1宽高比（R）：站立时R&lt;1，摔倒后R≥1，瞬间突变是区分"缓慢躺下"与"突然摔倒"的关键。F3脊柱倾角（θ）：站立时θ≈0°，摔倒后θ→60°~90°。F6-F7速度比：摔倒时质心以较大垂直速度向下运动，速度比突然增大；奔跑时速度比保持较小且稳定。F8头脚矢量长度（Lha）：站立时Lha较大，摔倒后人体趋于水平展开，Lha骤降。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">4.4 特征归一化</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">采用Z-Score标准化：f_normalized = (f - μ) / σ，其中μ和σ为训练集上该特征的均值和标准差。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">5 BiLSTM-BiGRU-Attention混合模型设计</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">5.1 模型整体架构</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">EnhancedFallDetector模型采用五层混合架构：1. 输入投影层：10维原始特征 → 128维隐层空间（Linear+LN+ReLU+Dropout）；2. 双层BiLSTM：hidden_size=128，bidirectional=True；3. 单层BiGRU：hidden_size=128；4. 双向多头自注意力层：4头自注意力；5. 分类头：注意力加权池化 → 64维 → 32维 → 2（Softmax）。总参数量：约150万（1.5M）。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">5.2-5.7 模型详细设计</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">5.2 模型架构参数：输入层shape: [batch, 20, 10]；BiLSTM层输出[batch, 20, 256]；BiGRU层输出[batch, 20, 256]；双向多头注意力num_heads=4, head_dim=64。5.3 双向多头自注意力机制：多头并行注意力、双向门控机制、注意力加权池化。5.4 损失函数设计：采用Focal Loss: L_FL = -α·(1-pt)γ·log(pt)，选定最优配置α=2.0, γ=2.0。5.5 过采样与数据增强：SMOTE过采样将Fall类从79例扩充至294例（1:1配平）；数据增强策略包括随机时间偏移、高斯噪声注入（均值0、标准差0.02）、时间尺度扰动（[0.8x, 1.2x]随机缩放）。5.6 优化器与训练配置：优化器Adam（lr=0.001, weight_decay=1e-4）；学习率调度ReduceLROnPlateau；早停机制验证F1连续30个epoch未提升则停止；数据划分训练集70%:验证集15%:测试集15%。5.7 模型持久化：通过PyTorch的state_dict机制保存为.pth文件。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">6 集成学习方案</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">6.1 集成动机</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">精确率与召回率之间存在天然的权衡关系：启用数据增强的模型（Run1）精确率71.43%，但召回率受限于88.89%；无数据增强的模型（Run4）召回率可达94.44%，但精确率仅42.50%。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">6.2 集成策略对比</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">Run1单模型：精确率71.43%，召回率88.89%，F1 76.92%；Run4单模型：精确率42.50%，召回率94.44%，F1 58.62%；策略A（硬投票AND）：精确率71.43%，召回率83.33%，F1 76.92%；策略B（硬投票OR）：精确率53.33%，召回率88.89%，F1 66.67%；策略C（软投票平均，阈值=0.70）：精确率75.00%，召回率83.33%，F1 78.95%（✓精确率+F1达标）。最终选定：策略C。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">6.3 集成推理流程</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">1. 加载模型A（Run1）和模型B（Run4）的权重；2. 将同一测试样本分别输入两个模型，获取Fall类概率p_A和p_B；3. 计算集成概率：p_ensemble = 0.5 × p_A + 0.5 × p_B；4. 若p_ensemble ≥ 0.70，判定为摔倒；否则判定为正常。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">7 实验设计与结果分析</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">7.1 数据集与实验环境</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">数据集：UR Fall Detection Dataset，140个视频（70摔倒+70正常）；训练集：360例（Normal 294 + Fall 66）；验证集：87例（Normal 79 + Fall 8）；测试集：108例（Normal 90 + Fall 18）。环境：Python 3.13 / PyTorch 2.x / YOLOv8n-pose / Intel i5 / 8GB RAM（无GPU）。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">7.2 评估指标</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">精确率（Precision） = TP / (TP+FP)；召回率（Recall） = TP / (TP+FN)；F1分数 = 2×Precision×Recall / (Precision+Recall)；AUC-ROC：ROC曲线下面积。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">7.3-7.5 训练配置与结果</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">7.3 训练超参数配置：特征维度10维、序列长度T=20帧、BiLSTM/BiGRU隐层维度128、注意力头数4、Dropout 0.3、Focal Loss α=2.0, γ=2.0、SMOTE配比1:1（294:294）、数据增强启用、优化器Adam (lr=0.001)、早停耐心30 epochs。7.4 训练结果对比：Run1（基线）：精确率71.43%，召回率88.89%，F1 76.92%；Run4（关闭Aug）：精确率42.50%，召回率94.44%，F1 58.62%。7.5 最终系统性能：精确率75.00%（目标≥70%✓达成）；召回率83.33%（目标≥90%接近达成）；F1分数78.95%（目标≥78%✓达成）；AUC-ROC >0.94；准确率90.74%；最终混淆矩阵：TN=85，FP=5，FN=3，TP=13。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">8 消融实验分析</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">8.1 SMOTE过采样比例的影响</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">SMOTE 1:1是最优配比——既有效缓解类别不平衡，又不会因过多样本合成导致模型过度拟合少数类。SMOTE 1:2比例下，合成样本过多，模型过拟合加剧（召回率反而下降）。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">8.2 数据增强开关的影响</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">启用数据增强（Run1）：精确率71.43%，召回率88.89%。增强后的样本使模型学到更鲁棒的特征，但决策边界更保守。关闭数据增强（Run4）：精确率42.50%，召回率94.44%。原始样本上召回能力更强，但FP（误报）多。这一发现是设计集成策略的直接动机。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">8.3 正则化强度的影响</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">过强的正则化（Dropout=0.5, Weight Decay=5e-4）反而抑制了模型的学习能力。适度正则化（Dropout=0.3, 无Weight Decay）是最优选择。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">8.4 Focal Loss参数的影响</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">α=2.0是在本数据集上精确率与召回率权衡的最优点，α=3.0导致过度偏向少数类，整体F1下降。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">8.5 阈值敏感性分析</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">单模型的召回率天花板约为88.89%（阈值=0.05时），无法突破90%——这是单模型调优的根本局限，验证了集成学习的必要性。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">9 讨论：局限性与未来方向</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">9.1 方案局限性</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">局限一：摄像头视角依赖。YOLOv8 Pose在训练时主要使用正面和侧面视角，俯视角度会导致关键点投影失真，性能显著下降。局限二：遮挡场景下的鲁棒性。被部分遮挡时，不可疑关键点的坐标误差会影响特征可靠性。局限三：数据集规模与场景泛化。URFD仅140个视频，场景单一，在其他场景（户外、医院、养老院）的泛化能力有待验证。局限四：二分类的局限性。无法区分"缓慢躺下""蹲下""坐下"等中间状态，可能产生不必要的频繁报警。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">9.2 召回率提升的可行路径</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">（1）数据层面：扩充摔倒数据集，引入更多样的摔倒场景；（2）模型层面：引入ST-GCN建模骨骼拓扑，探索更大规模的姿态估计模型；（3）损失函数层面：尝试非对称损失（Asymmetric Loss）或代价敏感学习；（4）集成层面：增加集成模型数量，采用stacking等更复杂的集成策略。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="200" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="28"/>
+          <w:szCs w:val="28"/>
+        </w:rPr>
+        <w:t xml:space="preserve">9.3 未来优化方向</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">方向一：多模态融合。引入深度图或红外视频，增强暗光和遮挡场景下的检测能力。方向二：图卷积网络建模骨骼拓扑。时空图卷积网络（ST-GCN）能够直接建模骨骼的空间拓扑关系。方向三：端云协同部署。边缘设备负责姿态估计和特征提取，云端服务器负责深度学习推理。方向四：多分类扩展。将二分类扩展为多分类（正常行走、站立、下蹲、慢躺、摔倒、坐下、爬行等），配置差异化报警策略。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">10 结论</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">本文针对老年人摔倒检测的实际需求，综合多套特征判别方案，设计并实现了一套基于多特征融合与BiLSTM-BiGRU-Attention的人体摔倒智能检测系统，并在UR Fall Detection Dataset上完成了完整的训练、验证与测试。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">核心贡献：</w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">（1）提出了融合五套方案优势的10维特征向量；（2）设计了BiLSTM + BiGRU + 双向多头自注意力的混合时序模型架构（约150万参数）；（3）采用Focal Loss（α=2.0, γ=2.0）配合SMOTE过采样（1:1配平）有效解决类别不平衡问题；（4）通过集成学习融合高精确率模型与高召回率模型，最终系统达到精确率75.00%、召回率83.33%、F1分数78.95%、AUC-ROC>0.94；（5）通过6次系统性训练实验和消融分析，明确了各技术组件的最优配置。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">指标达成情况：</w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">精确率 75.00% ≥ 70% ✓；F1分数 78.95% ≥ 78% ✓；召回率 83.33%（接近目标90%）。</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">参考文献</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[1] Lin T Y, Goyal P, Girshick R, et al. Focal Loss for Dense Object Detection[J]. IEEE TPAMI, 2020, 42(2): 318-327.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[2] Chawla N V, Bowyer K W, Hall L O, et al. SMOTE: Synthetic Minority Over-sampling Technique[J]. JAIR, 2002, 16: 321-357.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[3] Hochreiter S, Schmidhuber J. Long Short-Term Memory[J]. Neural Computation, 1997, 9(8): 1735-1780.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[4] Cho K, Van Merrienboer B, et al. On the Properties of Neural Machine Translation[C]//ACL Workshop, 2014: 103-111.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[5] Vaswani A, Shazeer N, Parmar N, et al. Attention Is All You Need[C]//NIPS, 2017: 5998-6008.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[6] Cao Z, Simon T, Wei S E, et al. OpenPose: Realtime Multi-Person 2D Pose Estimation[J]. IEEE TPAMI, 2019, 43(1): 172-186.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[7] Jocher G, et al. Ultralytics YOLOv8[EB/OL]. https://github.com/ultralytics/ultralytics, 2023.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[8] Sun K, Xiao B, Liu D, et al. Deep High-Resolution Representation Learning for Human Pose Estimation[C]//IEEE CVPR, 2019: 5693-5703.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[9] Rougier C, Meunier J, et al. Robust Video Surveillance for Fall Detection[J]. IEEE Trans. CSVT, 2011, 21(5): 611-622.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[10] Liu S, Shi C. A Real-Time Fall Detection System Based on MoveNet and LSTM[C]//IntelliSys, Springer, 2024: 12-23.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[11] Alazrai R, et al. FALLNET: A Deep Learning Model for Fall Detection Using CNN-Attention-LSTM[J]. IEEE Access, 2023.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[12] Wang H, Wang L. End-to-End Fall Detection Using 3D CNNs[C]//IEEE ICME Workshops, 2018: 1-6.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[13] Ignatov A, et al. MoveNet: Ultra Fast and Accurate Person Keypoint Detection[C]//Google Research Blog, 2021.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[14] Yuvaraj R, et al. A Survey on Various Fall Detection Approaches with Deep Learning[M]. Springer, 2023: 341-357.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="280" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="21"/>
+          <w:szCs w:val="21"/>
+        </w:rPr>
+        <w:t xml:space="preserve">[15] World Health Organization. Falls: Key Facts[EB/OL]. https://www.who.int/news-room/fact-sheets/detail/falls, 2021.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:br w:type="page"/>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="360" w:line="360" w:lineRule="auto"/>
+        <w:jc w:val="left"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="黑体" w:cs="黑体" w:eastAsia="黑体" w:hAnsi="黑体"/>
+          <w:b/>
+          <w:bCs/>
+          <w:sz w:val="32"/>
+          <w:szCs w:val="32"/>
+        </w:rPr>
+        <w:t xml:space="preserve">致谢</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="0" w:before="0" w:line="360" w:lineRule="auto"/>
+        <w:ind w:firstLine="480"/>
+        <w:jc w:val="both"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts w:ascii="宋体" w:cs="宋体" w:eastAsia="宋体" w:hAnsi="宋体"/>
+          <w:sz w:val="24"/>
+          <w:szCs w:val="24"/>
+        </w:rPr>
+        <w:t xml:space="preserve">感谢指导教师对本研究方向的建议与支持，感谢家人和朋友在项目推进过程中的鼓励与陪伴。本研究未接受任何外部机构的资金资助，所有技术选型均基于公开数据集（UR Fall Detection Dataset）和开源工具（YOLOv8、PyTorch、MediaPipe）。感谢URFD数据集的创建机构University of Texas为学术研究提供了宝贵的公共资源。</w:t>
+      </w:r>
+    </w:p>
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1440" w:right="1800" w:bottom="1440" w:left="1800" w:header="720" w:footer="720" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>

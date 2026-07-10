@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-05-08T13:27:54.124049",
+  "model_type": "full",
+  "feature_dim": 10,
+  "smote": true,
+  "augmentation": true,
+  "optimal_threshold": 0.05,
+  "test_metrics": {
+    "accuracy": 0.5555555555555556,
+    "precision": 0.265625,
+    "recall": 0.9444444444444444,
+    "f1_score": 0.4146341463414634,
+    "auc_roc": 0.915432098765432
+  },
+  "confusion_matrix": {
+    "tn": 43,
+    "fp": 47,
+    "fn": 1,
+    "tp": 17
+  },
+  "best_val_f1": 0.9285714285714286
+}

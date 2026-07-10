@@ -1,0 +1,406 @@
+<mxfile host="Electron" agent="WorkBuddy">
+  <diagram name="COCO关键点标注" id="coco-keypoints">
+    <mxGraphModel dx="977" dy="863" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1;fontColor=#333333;" value="COCO人体关键点标注方案（17点）" vertex="1">
+          <mxGeometry height="40" width="500" x="250" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="body-outline" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#cccccc;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="200" width="200" x="140" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="kp0" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ff6b6b;strokeColor=#cc0000;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="40" width="40" x="220" y="87.5" as="geometry" />
+        </mxCell>
+        <mxCell id="kp0-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontStyle=1;fontColor=#cc0000;" value="0: 鼻子" vertex="1">
+          <mxGeometry height="15" width="60" x="265" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="kp1" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4ecdc4;strokeColor=#2a9d8f;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="15" width="20" x="220" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="kp1-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#2a9d8f;" value="1: 左眼" vertex="1">
+          <mxGeometry height="15" width="40" x="160" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="kp2" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4ecdc4;strokeColor=#2a9d8f;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="15" width="20" x="240" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="kp2-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#2a9d8f;" value="2: 右眼" vertex="1">
+          <mxGeometry height="15" width="40" x="305" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="kp3" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#45b7d1;strokeColor=#2980b9;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="15" width="15" x="205" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="kp3-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#2980b9;" value="3: 左耳" vertex="1">
+          <mxGeometry height="15" width="45" x="130" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="kp4" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#45b7d1;strokeColor=#2980b9;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="15" width="15" x="260" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="kp4-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#2980b9;" value="4: 右耳" vertex="1">
+          <mxGeometry height="15" width="45" x="325" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="kp5" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#96ceb4;strokeColor=#5a9a7a;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="20" width="25" x="155" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="kp5-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#5a9a7a;" value="5: 左肩" vertex="1">
+          <mxGeometry height="15" width="50" x="100" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="kp6" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#96ceb4;strokeColor=#5a9a7a;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="20" width="25" x="320" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="kp6-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#5a9a7a;" value="6: 右肩" vertex="1">
+          <mxGeometry height="15" width="50" x="350" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="kp7" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffeaa7;strokeColor=#d4a017;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="18" width="22" x="110" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="kp7-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#d4a017;" value="7: 左肘" vertex="1">
+          <mxGeometry height="15" width="50" x="55" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="kp8" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffeaa7;strokeColor=#d4a017;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="18" width="22" x="365" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="kp8-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#d4a017;" value="8: 右肘" vertex="1">
+          <mxGeometry height="15" width="50" x="392" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="kp9" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fdcb6e;strokeColor=#c9940a;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="16" width="20" x="75" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="kp9-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#c9940a;" value="9: 左手腕" vertex="1">
+          <mxGeometry height="15" width="55" x="15" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="kp10" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fdcb6e;strokeColor=#c9940a;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="16" width="20" x="405" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="kp10-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#c9940a;" value="10: 右手腕" vertex="1">
+          <mxGeometry height="15" width="60" x="430" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="kp11" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#a29bfe;strokeColor=#6c5ce7;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="18" width="22" x="175" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="kp11-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#6c5ce7;" value="11: 左髋" vertex="1">
+          <mxGeometry height="15" width="60" x="110" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="kp12" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#a29bfe;strokeColor=#6c5ce7;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="18" width="22" x="303" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="kp12-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#6c5ce7;" value="12: 右髋" vertex="1">
+          <mxGeometry height="15" width="60" x="330" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="kp13" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fd79a8;strokeColor=#c44569;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="18" width="22" x="175" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="kp13-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#c44569;" value="13: 左膝" vertex="1">
+          <mxGeometry height="15" width="60" x="110" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="kp14" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fd79a8;strokeColor=#c44569;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="18" width="22" x="303" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="kp14-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#c44569;" value="14: 右膝" vertex="1">
+          <mxGeometry height="15" width="60" x="330" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="kp15" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e17055;strokeColor=#a0522d;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="16" width="20" x="175" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="kp15-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#a0522d;" value="15: 左踝" vertex="1">
+          <mxGeometry height="15" width="60" x="110" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="kp16" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e17055;strokeColor=#a0522d;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="16" width="20" x="305" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="kp16-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#a0522d;" value="16: 右踝" vertex="1">
+          <mxGeometry height="15" width="60" x="330" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="line0" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="240" y="127.5" as="sourcePoint" />
+            <mxPoint x="240" y="157.5" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line1" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="167" y="160" as="sourcePoint" />
+            <mxPoint x="121" y="209" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line2" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="121" y="209" as="sourcePoint" />
+            <mxPoint x="85" y="258" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line3" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="333" y="160" as="sourcePoint" />
+            <mxPoint x="376" y="209" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line4" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="376" y="209" as="sourcePoint" />
+            <mxPoint x="415" y="258" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line5" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="167" y="160" as="sourcePoint" />
+            <mxPoint x="333" y="160" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line6" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="240" y="170" as="sourcePoint" />
+            <mxPoint x="186" y="289" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line7" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="240" y="170" as="sourcePoint" />
+            <mxPoint x="314" y="289" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line8" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="186" y="298" as="sourcePoint" />
+            <mxPoint x="186" y="339" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line9" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="186" y="348" as="sourcePoint" />
+            <mxPoint x="185" y="396" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line10" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="314" y="298" as="sourcePoint" />
+            <mxPoint x="314" y="339" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line11" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="314" y="348" as="sourcePoint" />
+            <mxPoint x="315" y="396" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="line12" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="186" y="289" as="sourcePoint" />
+            <mxPoint x="314" y="289" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="table-bg" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cccccc;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="400" width="480" x="500" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="table-title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=14;fontStyle=1;fontColor=#333333;" value="COCO 17个关键点定义" vertex="1">
+          <mxGeometry height="25" width="240" x="620" y="85" as="geometry" />
+        </mxCell>
+        <mxCell id="th1" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#4a90d9;strokeColor=#2c5aa0;strokeWidth=1;fontColor=#ffffff;fontStyle=1;align=center;" value="编号" vertex="1">
+          <mxGeometry height="30" width="60" x="520" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="th2" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#4a90d9;strokeColor=#2c5aa0;strokeWidth=1;fontColor=#ffffff;fontStyle=1;align=center;" value="名称" vertex="1">
+          <mxGeometry height="30" width="120" x="580" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="th3" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#4a90d9;strokeColor=#2c5aa0;strokeWidth=1;fontColor=#ffffff;fontStyle=1;align=center;" value="英文名" vertex="1">
+          <mxGeometry height="30" width="100" x="700" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="th4" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#4a90d9;strokeColor=#2c5aa0;strokeWidth=1;fontColor=#ffffff;fontStyle=1;align=center;" value="类别" vertex="1">
+          <mxGeometry height="30" width="160" x="800" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="row0" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="0" vertex="1">
+          <mxGeometry height="25" width="60" x="520" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="row0n" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="鼻子" vertex="1">
+          <mxGeometry height="25" width="120" x="580" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="row0e" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="nose" vertex="1">
+          <mxGeometry height="25" width="100" x="700" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="row0c" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffe6e6;align=center;" value="面部" vertex="1">
+          <mxGeometry height="25" width="160" x="800" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="row1" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f0f0f0;align=center;" value="1-2" vertex="1">
+          <mxGeometry height="25" width="60" x="520" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="row1n" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f0f0f0;align=center;" value="眼睛" vertex="1">
+          <mxGeometry height="25" width="120" x="580" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="row1e" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f0f0f0;align=center;" value="eyes" vertex="1">
+          <mxGeometry height="25" width="100" x="700" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="row1c" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffe6e6;align=center;" value="面部" vertex="1">
+          <mxGeometry height="25" width="160" x="800" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="row2" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="3-4" vertex="1">
+          <mxGeometry height="25" width="60" x="520" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="row2n" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="耳朵" vertex="1">
+          <mxGeometry height="25" width="120" x="580" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="row2e" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="ears" vertex="1">
+          <mxGeometry height="25" width="100" x="700" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="row2c" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffe6e6;align=center;" value="面部" vertex="1">
+          <mxGeometry height="25" width="160" x="800" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="row3" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f0f0f0;align=center;" value="5-6" vertex="1">
+          <mxGeometry height="25" width="60" x="520" y="225" as="geometry" />
+        </mxCell>
+        <mxCell id="row3n" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f0f0f0;align=center;" value="肩膀" vertex="1">
+          <mxGeometry height="25" width="120" x="580" y="225" as="geometry" />
+        </mxCell>
+        <mxCell id="row3e" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f0f0f0;align=center;" value="shoulders" vertex="1">
+          <mxGeometry height="25" width="100" x="700" y="225" as="geometry" />
+        </mxCell>
+        <mxCell id="row3c" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#e6f3ff;align=center;" value="上肢" vertex="1">
+          <mxGeometry height="25" width="160" x="800" y="225" as="geometry" />
+        </mxCell>
+        <mxCell id="row4" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="7-8" vertex="1">
+          <mxGeometry height="25" width="60" x="520" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="row4n" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="手肘" vertex="1">
+          <mxGeometry height="25" width="120" x="580" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="row4e" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="elbows" vertex="1">
+          <mxGeometry height="25" width="100" x="700" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="row4c" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#e6f3ff;align=center;" value="上肢" vertex="1">
+          <mxGeometry height="25" width="160" x="800" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="row5" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f0f0f0;align=center;" value="9-10" vertex="1">
+          <mxGeometry height="25" width="60" x="520" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="row5n" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f0f0f0;align=center;" value="手腕" vertex="1">
+          <mxGeometry height="25" width="120" x="580" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="row5e" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f0f0f0;align=center;" value="wrists" vertex="1">
+          <mxGeometry height="25" width="100" x="700" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="row5c" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#e6f3ff;align=center;" value="上肢" vertex="1">
+          <mxGeometry height="25" width="160" x="800" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="row6" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="11-12" vertex="1">
+          <mxGeometry height="25" width="60" x="520" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="row6n" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="髋部" vertex="1">
+          <mxGeometry height="25" width="120" x="580" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="row6e" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="hips" vertex="1">
+          <mxGeometry height="25" width="100" x="700" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="row6c" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f3e6ff;align=center;" value="躯干" vertex="1">
+          <mxGeometry height="25" width="160" x="800" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="row7" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f0f0f0;align=center;" value="13-14" vertex="1">
+          <mxGeometry height="25" width="60" x="520" y="325" as="geometry" />
+        </mxCell>
+        <mxCell id="row7n" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f0f0f0;align=center;" value="膝盖" vertex="1">
+          <mxGeometry height="25" width="120" x="580" y="325" as="geometry" />
+        </mxCell>
+        <mxCell id="row7e" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#f0f0f0;align=center;" value="knees" vertex="1">
+          <mxGeometry height="25" width="100" x="700" y="325" as="geometry" />
+        </mxCell>
+        <mxCell id="row7c" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#fff3e6;align=center;" value="下肢" vertex="1">
+          <mxGeometry height="25" width="160" x="800" y="325" as="geometry" />
+        </mxCell>
+        <mxCell id="row8" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="15-16" vertex="1">
+          <mxGeometry height="25" width="60" x="520" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="row8n" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="脚踝" vertex="1">
+          <mxGeometry height="25" width="120" x="580" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="row8e" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#ffffff;align=center;" value="ankles" vertex="1">
+          <mxGeometry height="25" width="100" x="700" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="row8c" parent="1" style="shape=ext;padding=3;whiteSpace=wrap;html=1;fillColor=#fff3e6;align=center;" value="下肢" vertex="1">
+          <mxGeometry height="25" width="160" x="800" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="note-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f9f9f9;strokeColor=#cccccc;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="90" width="480" x="500" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="note-title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=12;fontStyle=1;fontColor=#333333;" value="特征提取说明" vertex="1">
+          <mxGeometry height="20" width="100" x="520" y="395" as="geometry" />
+        </mxCell>
+        <mxCell id="note1" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#666666;" value="• 角度特征: 计算相邻关键点之间的夹角（肩-肘-腕、髋-膝-踝等）" vertex="1">
+          <mxGeometry height="18" width="450" x="520" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="note2" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#666666;" value="• 距离特征: 计算相邻关键点之间的距离（用于判断肢体伸展程度）" vertex="1">
+          <mxGeometry height="18" width="450" x="520" y="440" as="geometry" />
+        </mxCell>
+        <mxCell id="note3" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#666666;" value="• 速度特征: 计算关键点在连续帧间的位移（检测运动剧烈程度）" vertex="1">
+          <mxGeometry height="18" width="450" x="520" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-box" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cccccc;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="120" width="870" x="60" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=12;fontStyle=1;fontColor=#333333;" value="关键点类别图例" vertex="1">
+          <mxGeometry height="20" width="200" x="400" y="505" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ff6b6b;strokeColor=#cc0000;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="20" width="20" x="100" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=#333333;" value="头部(0)" vertex="1">
+          <mxGeometry height="20" width="60" x="130" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4ecdc4;strokeColor=#2a9d8f;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="15" width="20" x="210" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=#333333;" value="眼睛(1-2)" vertex="1">
+          <mxGeometry height="20" width="70" x="240" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#45b7d1;strokeColor=#2980b9;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="15" width="15" x="330" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=#333333;" value="耳朵(3-4)" vertex="1">
+          <mxGeometry height="20" width="70" x="355" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#96ceb4;strokeColor=#5a9a7a;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="18" width="22" x="450" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=#333333;" value="肩膀(5-6)" vertex="1">
+          <mxGeometry height="20" width="70" x="480" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg5" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffeaa7;strokeColor=#d4a017;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="16" width="20" x="580" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg5t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=#333333;" value="手肘(7-8)" vertex="1">
+          <mxGeometry height="20" width="70" x="610" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg6" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fdcb6e;strokeColor=#c9940a;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="14" width="18" x="710" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg6t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=#333333;" value="手腕(9-10)" vertex="1">
+          <mxGeometry height="20" width="80" x="738" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg7" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#a29bfe;strokeColor=#6c5ce7;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="16" width="20" x="100" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="leg7t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=#333333;" value="髋部(11-12)" vertex="1">
+          <mxGeometry height="20" width="80" x="130" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="leg8" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#fd79a8;strokeColor=#c44569;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="16" width="20" x="250" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="leg8t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=#333333;" value="膝盖(13-14)" vertex="1">
+          <mxGeometry height="20" width="80" x="280" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="leg9" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e17055;strokeColor=#a0522d;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="14" width="18" x="400" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="leg9t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=#333333;" value="脚踝(15-16)" vertex="1">
+          <mxGeometry height="20" width="85" x="428" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="leg10" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#888888;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="560" y="590" as="sourcePoint" />
+            <mxPoint x="610" y="590" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg10t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;fontColor=#333333;" value="骨骼连接" vertex="1">
+          <mxGeometry height="20" width="70" x="620" y="580" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

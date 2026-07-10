@@ -1,0 +1,10 @@
+﻿D:\识别人类摔倒的智能系统\dataset\val\fall\fall-01-cam0.mp4,1
+D:\识别人类摔倒的智能系统\dataset\val\fall\fall-20-cam0.mp4,1
+D:\识别人类摔倒的智能系统\dataset\val\fall\fall-24-cam0.mp4,1
+D:\识别人类摔倒的智能系统\dataset\val\fall\fall-28-cam0.mp4,1
+D:\识别人类摔倒的智能系统\dataset\val\adl\adl-01-cam0.mp4,0
+D:\识别人类摔倒的智能系统\dataset\val\adl\adl-17-cam0.mp4,0
+D:\识别人类摔倒的智能系统\dataset\val\adl\adl-22-cam0.mp4,0
+D:\识别人类摔倒的智能系统\dataset\val\adl\adl-29-cam0.mp4,0
+D:\识别人类摔倒的智能系统\dataset\val\adl\adl-30-cam0.mp4,0
+D:\识别人类摔倒的智能系统\dataset\val\adl\adl-36-cam0.mp4,0

@@ -1,0 +1,211 @@
+<mxfile host="Electron" agent="WorkBuddy">
+  <diagram name="集成策略性能对比" id="ensemble-comparison">
+    <mxGraphModel dx="1218" dy="795" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=18;fontStyle=1;fontColor=#333333;" value="图6-2 集成策略性能对比" vertex="1">
+          <mxGeometry height="40" width="400" x="350" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=12;fontColor=#666666;" value="单一模型 vs 投票集成 vs 加权集成" vertex="1">
+          <mxGeometry height="25" width="400" x="350" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="chart-bg" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cccccc;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="400" width="600" x="100" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="y-axis" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#333333;strokeWidth=2;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="150" y="480" as="sourcePoint" />
+            <mxPoint x="150" y="120" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="x-axis" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#333333;strokeWidth=2;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="150" y="480" as="sourcePoint" />
+            <mxPoint x="680" y="480" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="y-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=12;fontStyle=1;fontColor=#333333;rotation=-90;" value="性能指标 (%)" vertex="1">
+          <mxGeometry height="20" width="80" x="80" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="x-label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=12;fontStyle=1;fontColor=#333333;" value="集成策略" vertex="1">
+          <mxGeometry height="20" width="80" x="391" y="514" as="geometry" />
+        </mxCell>
+        <mxCell id="y-100" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=right;fontSize=10;fontColor=#666666;" value="100" vertex="1">
+          <mxGeometry height="15" width="35" x="115" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="y-80" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=right;fontSize=10;fontColor=#666666;" value="80" vertex="1">
+          <mxGeometry height="15" width="35" x="115" y="198" as="geometry" />
+        </mxCell>
+        <mxCell id="y-60" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=right;fontSize=10;fontColor=#666666;" value="60" vertex="1">
+          <mxGeometry height="15" width="35" x="115" y="278" as="geometry" />
+        </mxCell>
+        <mxCell id="y-40" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=right;fontSize=10;fontColor=#666666;" value="40" vertex="1">
+          <mxGeometry height="15" width="35" x="115" y="358" as="geometry" />
+        </mxCell>
+        <mxCell id="y-20" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=right;fontSize=10;fontColor=#666666;" value="20" vertex="1">
+          <mxGeometry height="15" width="35" x="115" y="438" as="geometry" />
+        </mxCell>
+        <mxCell id="grid-80" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;strokeColor=#dddddd;strokeWidth=1;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="150" y="200" as="sourcePoint" />
+            <mxPoint x="680" y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="grid-60" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;strokeColor=#dddddd;strokeWidth=1;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="150" y="280" as="sourcePoint" />
+            <mxPoint x="680" y="280" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="grid-40" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;strokeColor=#dddddd;strokeWidth=1;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="150" y="360" as="sourcePoint" />
+            <mxPoint x="680" y="360" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="grid-20" edge="1" parent="1" style="endArrow=none;dashed=1;html=1;strokeColor=#dddddd;strokeWidth=1;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="150" y="440" as="sourcePoint" />
+            <mxPoint x="680" y="440" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="bar1-accuracy" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4a90d9;strokeColor=#2c5aa0;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="342" width="40" x="180" y="138" as="geometry" />
+        </mxCell>
+        <mxCell id="bar1-precision" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2ecc71;strokeColor=#27ae60;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="282" width="40" x="220" y="198" as="geometry" />
+        </mxCell>
+        <mxCell id="bar1-recall" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e74c3c;strokeColor=#c0392b;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="310" width="40" x="260" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="bar1-f1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f39c12;strokeColor=#d68910;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="286" width="40" x="300" y="194" as="geometry" />
+        </mxCell>
+        <mxCell id="label-single" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=11;fontStyle=1;fontColor=#333333;" value="单模型" vertex="1">
+          <mxGeometry height="20" width="160" x="190" y="478" as="geometry" />
+        </mxCell>
+        <mxCell id="bar2-accuracy" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4a90d9;strokeColor=#2c5aa0;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="346" width="40" x="370" y="134" as="geometry" />
+        </mxCell>
+        <mxCell id="bar2-precision" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2ecc71;strokeColor=#27ae60;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="310" width="40" x="410" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="bar2-recall" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e74c3c;strokeColor=#c0392b;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="334" width="40" x="450" y="146" as="geometry" />
+        </mxCell>
+        <mxCell id="bar2-f1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f39c12;strokeColor=#d68910;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="318" width="40" x="490" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="label-voting" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=11;fontStyle=1;fontColor=#333333;" value="投票集成" vertex="1">
+          <mxGeometry height="20" width="160" x="380" y="478" as="geometry" />
+        </mxCell>
+        <mxCell id="bar3-accuracy" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4a90d9;strokeColor=#2c5aa0;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="350" width="40" x="560" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="bar3-precision" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2ecc71;strokeColor=#27ae60;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="318" width="40" x="600" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="bar3-recall" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e74c3c;strokeColor=#c0392b;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="342" width="40" x="640" y="138" as="geometry" />
+        </mxCell>
+        <mxCell id="bar3-f1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f39c12;strokeColor=#d68910;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="326" width="40" x="680" y="154" as="geometry" />
+        </mxCell>
+        <mxCell id="label-weighted" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=11;fontStyle=1;fontColor=#333333;" value="加权集成" vertex="1">
+          <mxGeometry height="20" width="160" x="570" y="478" as="geometry" />
+        </mxCell>
+        <mxCell id="v1-acc" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#2c5aa0;fontStyle=1;" value="85.2" vertex="1">
+          <mxGeometry height="15" width="40" x="180" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="v1-pre" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#27ae60;fontStyle=1;" value="76.5" vertex="1">
+          <mxGeometry height="15" width="40" x="220" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="v1-rec" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#c0392b;fontStyle=1;" value="83.3" vertex="1">
+          <mxGeometry height="15" width="40" x="260" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="v1-f1" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#d68910;fontStyle=1;" value="79.8" vertex="1">
+          <mxGeometry height="15" width="40" x="300" y="186" as="geometry" />
+        </mxCell>
+        <mxCell id="v2-acc" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#2c5aa0;fontStyle=1;" value="86.5" vertex="1">
+          <mxGeometry height="15" width="40" x="370" y="126" as="geometry" />
+        </mxCell>
+        <mxCell id="v2-pre" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#27ae60;fontStyle=1;" value="80.0" vertex="1">
+          <mxGeometry height="15" width="40" x="410" y="162" as="geometry" />
+        </mxCell>
+        <mxCell id="v2-rec" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#c0392b;fontStyle=1;" value="85.7" vertex="1">
+          <mxGeometry height="15" width="40" x="450" y="138" as="geometry" />
+        </mxCell>
+        <mxCell id="v2-f1" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#d68910;fontStyle=1;" value="82.7" vertex="1">
+          <mxGeometry height="15" width="40" x="490" y="154" as="geometry" />
+        </mxCell>
+        <mxCell id="v3-acc" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#2c5aa0;fontStyle=1;" value="87.5" vertex="1">
+          <mxGeometry height="15" width="40" x="560" y="122" as="geometry" />
+        </mxCell>
+        <mxCell id="v3-pre" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#27ae60;fontStyle=1;" value="82.3" vertex="1">
+          <mxGeometry height="15" width="40" x="600" y="154" as="geometry" />
+        </mxCell>
+        <mxCell id="v3-rec" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#c0392b;fontStyle=1;" value="86.9" vertex="1">
+          <mxGeometry height="15" width="40" x="640" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="v3-f1" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#d68910;fontStyle=1;" value="84.5" vertex="1">
+          <mxGeometry height="15" width="40" x="680" y="146" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-bg" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f9f9f9;strokeColor=#cccccc;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="39" width="620" x="100" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-acc" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#4a90d9;strokeColor=#2c5aa0;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="15" width="25" x="273" y="552" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-acc-t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#333333;" value="准确率" vertex="1">
+          <mxGeometry height="20" width="50" x="303" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-pre" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#2ecc71;strokeColor=#27ae60;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="15" width="25" x="363" y="552" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-pre-t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#333333;" value="精确率" vertex="1">
+          <mxGeometry height="20" width="50" x="393" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-rec" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e74c3c;strokeColor=#c0392b;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="15" width="25" x="453" y="552" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-rec-t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#333333;" value="召回率" vertex="1">
+          <mxGeometry height="20" width="50" x="483" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-f1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f39c12;strokeColor=#d68910;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="15" width="25" x="543" y="552" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-f1-t" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#333333;" value="F1分数" vertex="1">
+          <mxGeometry height="20" width="50" x="573" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="summary-bg" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8f4f8;strokeColor=#4a90d9;strokeWidth=2;" value="" vertex="1">
+          <mxGeometry height="481" width="170" x="730" y="99" as="geometry" />
+        </mxCell>
+        <mxCell id="summary-title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=14;fontStyle=1;fontColor=#2c5aa0;" value="性能总结" vertex="1">
+          <mxGeometry height="30" width="260" x="685" y="104" as="geometry" />
+        </mxCell>
+        <mxCell id="sum-single" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontStyle=1;fontColor=#333333;" value="单一模型基线" vertex="1">
+          <mxGeometry height="20" width="230" x="735" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="sum-single-d" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#666666;" value="Accuracy: 85.2%&#xa;Precision: 76.5%&#xa;Recall: 83.3%&#xa;F1: 79.8%" vertex="1">
+          <mxGeometry height="60" width="230" x="735" y="165" as="geometry" />
+        </mxCell>
+        <mxCell id="sum-voting" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontStyle=1;fontColor=#27ae60;" value="投票集成 (+1.3%Acc)" vertex="1">
+          <mxGeometry height="20" width="230" x="735" y="235" as="geometry" />
+        </mxCell>
+        <mxCell id="sum-voting-d" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#666666;" value="Accuracy: 86.5%&#xa;Precision: 80.0%&#xa;Recall: 85.7%&#xa;F1: 82.7%" vertex="1">
+          <mxGeometry height="60" width="230" x="735" y="255" as="geometry" />
+        </mxCell>
+        <mxCell id="sum-weighted" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontStyle=1;fontColor=#c0392b;fontStyle=1;" value="加权集成 (最优)" vertex="1">
+          <mxGeometry height="20" width="230" x="735" y="325" as="geometry" />
+        </mxCell>
+        <mxCell id="sum-weighted-d" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#666666;" value="Accuracy: 87.5%&#xa;Precision: 82.3%&#xa;Recall: 86.9%&#xa;F1: 84.5%" vertex="1">
+          <mxGeometry height="60" width="230" x="735" y="345" as="geometry" />
+        </mxCell>
+        <mxCell id="sum-conclusion" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#333333;" value="结论：加权集成策略&lt;div&gt;在各项指标上均优于&lt;/div&gt;&lt;div&gt;单一模型和&lt;/div&gt;&lt;div&gt;投票集成，建议在&lt;/div&gt;&lt;div&gt;实际部署中采用。&lt;/div&gt;" vertex="1">
+          <mxGeometry height="70" width="245" x="737.5" y="438" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
