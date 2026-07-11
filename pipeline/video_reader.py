@@ -20,7 +20,11 @@ import numpy as np
 
 
 class MCFDReader:
-    """Synchronized multi-view video reader for MCFD."""
+    """Synchronized multi-view video reader for MCFD.
+
+    Supports per-camera frame offsets for approximate time synchronization.
+    Offsets are estimated from data_tuple3.csv fall segment annotations.
+    """
 
     def __init__(
         self,
@@ -30,26 +34,40 @@ class MCFDReader:
         target_size: int = 640,
         start_frame: int = 0,
         end_frame: Optional[int] = None,
+        offsets: Optional[dict[int, float]] = None,
+        ref_cam: int = 1,
     ):
         """
         Args:
             data_root: Path to MCFD root (contains dataset/, data_tuple3.csv).
             scenario: Scenario number (1-24).
             camera_ids: Which cameras to read, e.g. [1, 4, 7].
-            target_size: Resize frames to target_size × target_size (keep aspect ratio via padding).
-            start_frame: First frame to read (0-based).
+            target_size: Resize frames to target_size × target_size.
+            start_frame: First frame to read (0-based, in reference camera coords).
             end_frame: Last frame to read (exclusive); None = read all.
+            offsets: dict[cam_id] -> frame offset. Positive = target is ahead.
+                     e.g. {5: 20} means cam5 frame 1120 ≈ cam1 frame 1100.
+                     If None, auto-compute from annotations.
+            ref_cam: Reference camera ID for offsets (default cam1).
         """
         self.scenario = scenario
         self.camera_ids = camera_ids
         self.target_size = target_size
         self.num_views = len(camera_ids)
 
+        # Compute or use offsets
+        if offsets is None:
+            from pipeline.sync import compute_offsets
+            self._offsets = dict(compute_offsets(data_root, scenario, ref_cam))
+        else:
+            self._offsets = dict(offsets)  # copy to avoid mutating caller's dict
+
         scenario_dir = os.path.join(data_root, "dataset", f"chute{scenario:02d}")
         if not os.path.isdir(scenario_dir):
             raise FileNotFoundError(f"Scenario directory not found: {scenario_dir}")
 
         self.caps: list[cv2.VideoCapture] = []
+        self._cam_frame_counts: list[int] = []
         for cid in camera_ids:
             video_path = os.path.join(scenario_dir, f"cam{cid}.avi")
             if not os.path.isfile(video_path):
@@ -58,16 +76,52 @@ class MCFDReader:
             if not cap.isOpened():
                 raise RuntimeError(f"Cannot open video: {video_path}")
             self.caps.append(cap)
+            self._cam_frame_counts.append(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
 
-        # Seek to start_frame and determine total frames
-        self.total_frames = int(self.caps[0].get(cv2.CAP_PROP_FRAME_COUNT))
+        # Determine seek positions with offsets.
+        #
+        # offset[cid] = N means: cam{cid}'s frame K ≈ cam_ref's frame (K - N)
+        #   e.g., offset[5] = 20 → cam5 frame 1120 ≈ cam1 frame 1100
+        #
+        # To read synchronized frames starting at start_frame (ref time):
+        #   cam{cid} reads frame: start_frame + offset[cid]
+        #
+        # Round all offsets to int (from np.median float)
+        for cid in camera_ids:
+            self._offsets[cid] = int(round(self._offsets.get(cid, 0)))
+
+        all_offs = [self._offsets.get(cid, 0) for cid in camera_ids]
+        min_off = min(all_offs)
+
+        # Shift all cameras so the earliest-starting one starts at frame 0
+        if min_off < 0:
+            shift = -min_off
+            start_frame += shift
+            # Don't add to offsets — offsets are relative to ref already
+            # The shift is absorbed into start_frame
+
+        self._seek_positions = []
+        self._effective_lengths = []
+        for i, cid in enumerate(camera_ids):
+            # For negative offsets: cam is behind ref, needs fewer seek frames
+            # seek_to = max(0, start_frame + offset) — but after shift, start_frame
+            # already includes -min_off, so offsets are non-negative.
+            off = self._offsets.get(cid, 0)
+            seek_to = max(0, start_frame + off)
+            self._seek_positions.append(seek_to)
+            self._effective_lengths.append(self._cam_frame_counts[i] - seek_to)
+
+            if off != 0:
+                print(f"[SYNC] cam{cid} offset={off:+d} → seek frame {seek_to}")
+
+        # Seek all cameras
         for i, cap in enumerate(self.caps):
-            fc = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            if fc != self.total_frames:
-                print(f"[WARN] cam{self.camera_ids[i]}: {fc} frames vs cam{self.camera_ids[0]}: {self.total_frames}")
-            cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, self._seek_positions[i])
 
-        self.current_frame = start_frame
+        # Total frames = min effective length across all cameras
+        self.total_frames = min(self._effective_lengths)
+        self.current_frame = 0  # relative to seek start
+
         self.end_frame = end_frame if end_frame is not None else self.total_frames
         self.end_frame = min(self.end_frame, self.total_frames)
 
