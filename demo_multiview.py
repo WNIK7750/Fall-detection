@@ -34,7 +34,7 @@ from pipeline.video_reader import MCFDReader, load_annotations, find_fall_segmen
 from pipeline.pose_inference import PoseDetector, MultiViewPoseVisualizer
 from pipeline.triangulation import Triangulator, KalmanSmoother
 from pipeline.features_3d import compute_features, extract_window
-from pipeline.classifier import FallClassifier
+from pipeline.classifier import FallClassifier, HeuristicClassifier
 from pipeline.llm_reviewer import LLMFallReviewer
 from pipeline.calibration import get_projections
 
@@ -114,7 +114,7 @@ def run_demo(args):
     tri = Triangulator(projections)
     smoother = KalmanSmoother()
 
-    # Classifier (optional — requires trained checkpoint)
+    # Classifier — ML model or heuristic fallback
     classifier = None
     if args.checkpoint:
         print(f"Loading classifier: {args.checkpoint}")
@@ -124,9 +124,12 @@ def run_demo(args):
                 threshold_low=args.threshold_low,
                 threshold_high=args.threshold_high,
             )
-            print(f"  Params: {classifier.num_params:,}, thresholds: {args.threshold_low}/{args.threshold_high}")
-        except FileNotFoundError:
-            print(f"  WARNING: Checkpoint not found, classifier disabled.")
+            print(f"  Params: {clf.num_params:,}")
+        except (FileNotFoundError, RuntimeError) as e:
+            print(f"  WARNING: {e}")
+    if classifier is None:
+        print("Using heuristic classifier (rule-based fallback)")
+        classifier = HeuristicClassifier()
 
     # LLM Reviewer (optional)
     reviewer = None
@@ -189,10 +192,9 @@ def run_demo(args):
             # 4. Classification (every stride=5 frames)
             cls_result = None
             if classifier and len(feature_history) >= 20 and frame_idx % 5 == 0:
-                # Take last 20 features
-                window = np.array(list(feature_history)[-20:])  # (20, 10)
-                window = window.T[np.newaxis, ...]  # (1, 10, 20)
-                cls_result = classifier.predict(window[0])  # predict takes (10, 20)
+                # Take last 20 features as (20, 10) = (seq_len, input_size)
+                window = np.array(list(feature_history)[-20:])
+                cls_result = classifier.predict(window)
                 current_status = cls_result["class_name"]
 
             # 5. LLM Review (on "suspected")

@@ -75,12 +75,13 @@ class FallClassifier:
         """Predict fall probability.
 
         Args:
-            features: (N, 20, 10) or (20, 10) — 10-D features over 20 timesteps.
+            features: (N, 20, 10) or (20, 10) — (seq_len=20, input_size=10).
         Returns:
             (N, 2) or (2,) probabilities [p_normal, p_fall].
         """
         single = (features.ndim == 2)
-        x = features[np.newaxis, ...] if single else features
+        # Ensure shape (batch, 20, 10)
+        x = features[np.newaxis, :, :] if single else features
         x = torch.tensor(x, dtype=torch.float32).to(self.device)
 
         with torch.no_grad():
@@ -118,6 +119,78 @@ class FallClassifier:
     @property
     def num_params(self) -> int:
         return sum(p.numel() for p in self.model.parameters())
+
+
+class HeuristicClassifier:
+    """Rule-based fall detector using 3D biomechanical features.
+
+    Uses simple thresholds on COM height and spine angle as a fallback
+    when a trained ML classifier is not available. Honest and transparent.
+    """
+
+    CLASS_NAMES = {0: "normal", 1: "suspected", 2: "fall"}
+
+    def __init__(
+        self,
+        com_ratio_threshold: float = 0.4,
+        spine_z_threshold: float = 0.5,
+        velocity_threshold: float = 0.3,
+    ):
+        """
+        Args:
+            com_ratio_threshold: COM height / standing_height below this → potential fall.
+            spine_z_threshold: Spine Z component below this → torso is near horizontal.
+            velocity_threshold: Vertical velocity magnitude above this → rapid movement.
+        """
+        self.com_th = com_ratio_threshold
+        self.spine_th = spine_z_threshold
+        self.vel_th = velocity_threshold
+
+    def predict(self, features: np.ndarray) -> dict:
+        """Heuristic fall detection from 10-D features.
+
+        Features (indices):
+            0: AR, 1: dAR, 2: torso_angle(°), 3: d_torso,
+            4: COM_height_ratio, 5: COM_vel_Z, 6: vel_ratio,
+            7: head_foot_dist, 8: head_height_ratio, 9: spine_Z
+
+        Rules:
+            COM near floor + spine horizontal → fall
+            COM dropping fast or low → suspected
+            Otherwise → normal
+        """
+        if features.ndim == 2:
+            # (20, 10) → take mean over window
+            f = features.mean(axis=0)
+        else:
+            f = features
+
+        com_h = float(f[4])       # COM height / standing height
+        spine_z = float(f[9])     # spine direction Z (1=upright)
+        com_vel = float(f[5])     # vertical velocity
+        torso_angle = float(f[2]) # degrees from upright
+
+        # Fall: low COM + near-horizontal spine
+        is_fall = (com_h < self.com_th and abs(spine_z) < self.spine_th)
+        # Suspected: dropping fast or low COM
+        is_suspected = abs(com_vel) > self.vel_th or com_h < self.com_th * 1.5
+
+        if is_fall:
+            class_id, name = 2, "fall"
+        elif is_suspected:
+            class_id, name = 1, "suspected"
+        else:
+            class_id, name = 0, "normal"
+
+        return {
+            "class_id": class_id,
+            "class_name": name,
+            "fall_prob": round(0.95 if is_fall else (0.6 if is_suspected else 0.1), 2),
+            "normal_prob": round(0.05 if is_fall else (0.4 if is_suspected else 0.9), 2),
+            "com_height": round(com_h, 3),
+            "spine_z": round(spine_z, 3),
+            "torso_angle": round(torso_angle, 1),
+        }
 
 
 # --- Quick test with dummy data ---
