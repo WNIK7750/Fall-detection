@@ -225,8 +225,9 @@ def run_demo(args):
                 vis = draw_status_bar(vis, status_text, status_color)
                 vis_frames.append(vis)
 
-            # Add 3D skeleton mini-view
+            # Add 3D skeleton mini-view (resized to match frame height)
             skel_vis = draw_3d_skeleton(np.zeros((200, 200, 3), dtype=np.uint8), skel)
+            skel_vis = cv2.resize(skel_vis, (vis_frames[0].shape[1], vis_frames[0].shape[0]))
             vis_frames.append(skel_vis)
 
             # Combine into one wide image
