@@ -147,53 +147,39 @@ class Triangulator:
 
 
 class KalmanSmoother:
-    """Simple 1D Kalman filter per joint axis for temporal smoothing."""
+    """Exponential moving average smoother with NaN-aware state persistence."""
 
-    def __init__(
-        self,
-        n_joints: int = 17,
-        process_noise: float = 0.01,
-        measurement_noise: float = 0.1,
-    ):
+    def __init__(self, n_joints: int = 17, alpha: float = 0.3):
+        """
+        Args:
+            n_joints: Number of skeleton joints (17 for COCO).
+            alpha: Smoothing factor (0=keep previous, 1=use raw).
+        """
         self.n_joints = n_joints
-        self.process_noise = process_noise
-        self.measurement_noise = measurement_noise
-
-        # State: [x, vx, y, vy, z, vz] per joint → (n_joints * 6,)
-        self.state = np.zeros(n_joints * 6, dtype=np.float64)
-        self.cov = np.eye(n_joints * 6, dtype=np.float64) * 0.1
-        self.initialized = False
+        self.alpha = alpha
+        self._state = np.zeros((n_joints, 3), dtype=np.float64)
+        self._initialized = [False] * n_joints
 
     def update(self, skeleton_3d: np.ndarray) -> np.ndarray:
-        """Update filter with new measurement, return smoothed estimate.
+        """Smooth skeleton, filling NaN joints with previous state.
 
-        Args:
-            skeleton_3d: (17, 3) — may contain NaN for missing joints.
-        Returns:
-            (17, 3) smoothed skeleton.
+        If a joint is NaN in the current frame, return the last known state.
+        If a joint is valid, blend with exponential moving average.
         """
-        dt = 1.0  # assume 1 frame interval
-
-        if not self.initialized:
-            for j in range(self.n_joints):
-                if not np.any(np.isnan(skeleton_3d[j])):
-                    base = j * 6
-                    self.state[base:base + 3] = skeleton_3d[j]
-                    self.state[base + 3:base + 6] = 0.0  # velocity
-            self.initialized = True
-            return skeleton_3d
-
-        # Simple per-joint exponential smoothing (more robust than full Kalman)
-        # Full Kalman with 6D state per joint is overkill for demo
-        alpha = 0.3  # smoothing factor (lower = smoother)
         smoothed = skeleton_3d.copy()
+
         for j in range(self.n_joints):
-            if not np.any(np.isnan(skeleton_3d[j])):
-                base = j * 6
-                prev = self.state[base:base + 3]
-                if not np.any(np.isnan(prev)):
-                    smoothed[j] = alpha * skeleton_3d[j] + (1 - alpha) * prev
-                self.state[base:base + 3] = smoothed[j]
+            if np.any(np.isnan(skeleton_3d[j])):
+                # Joint missing — use last known state
+                if self._initialized[j]:
+                    smoothed[j] = self._state[j].copy()
+            else:
+                # Joint valid — blend with history
+                if self._initialized[j]:
+                    smoothed[j] = (self.alpha * skeleton_3d[j] +
+                                   (1.0 - self.alpha) * self._state[j])
+                self._state[j] = smoothed[j].copy()
+                self._initialized[j] = True
 
         return smoothed
 
