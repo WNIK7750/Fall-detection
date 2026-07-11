@@ -1,0 +1,191 @@
+# Fall Detection Project — Agent External Memory
+
+> Last updated: 2026-07-12 | Agent: CodeBuddy (Deepseek-V4-Pro)
+
+---
+
+## Project Identity
+
+- **Project**: 老年人跌倒检测系统 — 20-Day Roadshow Demo
+- **Goal**: Upgrade existing 2D single-view fall detection → Multi-view 3D system with LLM review
+- **Timeline**: 20 days from 2026-07-10 (deadline: 2026-07-30)
+- **Engine**: Python 3.x, PyTorch, OpenCV, ultralytics, llama-cpp-python
+- **Hardware**: RTX 3060 Ti 8GB VRAM
+- **Git**: https://github.com/WNIK7750/Fall-detection.git (main branch)
+- **Primary Doc**: `Docs/prompt.md` (187 lines, full spec)
+
+---
+
+## Current State (Pre-Upgrade)
+
+### Already Built (2D System)
+- **Pose Extraction**: YOLOv8n-pose + MediaPipe Pose, 10-dim features per 20-frame window
+- **Model**: BiLSTM + BiGRU + Bidirectional Multi-Head Self-Attention (~4.3M params full, ~130K compact)
+- **Training**: SMOTE oversampling + Focal Loss (α=3.0, γ=2.0) + data augmentation
+- **Inference**: Dual-model soft-voting ensemble (Model A high precision + Model B high recall)
+- **Metrics**: Precision 75%, Recall 83.33%, F1 78.95%, AUC-ROC >0.94 (UR Fall Dataset)
+- **Demo**: `demo_video.py` — real-time pose visualization + fall probability overlay
+- **Datasets Used**: UR Fall Detection Dataset (URFD) — 70 videos, single camera (cam0 only)
+- **Features Extracted**: `features/train|val|test/` — .npy files, 10-dim × 20-frame windows
+
+### Key Files
+| File | Role |
+|------|------|
+| `ensemble_inference.py` | Main inference entry (dual-model soft voting) |
+| `demo_video.py` | Real-time demo with visualization |
+| `train_enhanced.py` | Training script (BiLSTM+BiGRU+Attention) |
+| `extract_features_v3.py` | Feature extraction (MediaPipe version) |
+| `extract_gmdcsa24.py` | Feature extraction (YOLOv8 batch version) |
+| `models/enhanced_lstm.py` | Model architecture definitions |
+| `yolov8n-pose.pt` | YOLOv8 pose model weights (6.52 MB) |
+| `checkpoints/` | 8 enhanced runs + archived experiments |
+| `features/` | UR Fall extracted features (360 train, 92 val, 108 test) |
+
+---
+
+## Development Progress (2026-07-12)
+
+### Environment ✅ Complete
+| Component | Status | Detail |
+|-----------|--------|--------|
+| Python 3.13.10 + pip 26.1.2 | ✅ | All packages installed |
+| PyTorch 2.6.0+cu124 | ✅ | CUDA, RTX 3060 Ti 8GB |
+| ultralytics 8.4.92 | ✅ | YOLOv8n-pose |
+| llama-cpp-python 0.3.33 | ✅ | LLM inference |
+| Gradio 6.20.0 | ✅ | Demo UI |
+
+### Data ✅ Downloaded
+| Item | Location | Detail |
+|------|----------|--------|
+| MCFD | `dataset/mcfd/` | 24 chutes × 8 cams = 192 .avi |
+| Qwen3-VL-4B | `models/llm/` | Q4_K_M + mmproj Q8_0 (~3.6GB) |
+| Qwen3-VL-8B | `models/llm/` | Q4_K_M only, backup |
+
+### LLM: 4B-First Strategy
+- Use 4B to build and test full pipeline (fits 8GB VRAM comfortably)
+- After pipeline works end-to-end, evaluate if 8B upgrade is worthwhile
+
+### Pipeline Progress
+| Module | Status |
+|--------|--------|
+| M2: YOLOv8 Batch | 🔨 Building now |
+| M3: Triangulation | ⏳ |
+| M4: 3D Features | ⏳ |
+| M5: 3-Class Classifier | ⏳ |
+| M6: LLM Review | ⏳ |
+| M7: Visualization | ⏳ |
+
+---
+
+## Target State (After 20-Day Upgrade)
+
+### 7 Modules to Build/Upgrade
+
+1. **Module 1 — Dataset**: Two independent validation lines
+   - Line A (3D accuracy): Multi-view dataset → triangulation → MPJPE validation (Skip NTU, use alternative)
+   - Line B (fall detection): Reuse existing UR Fall Dataset pipeline
+
+2. **Module 2 — YOLOv8n-pose Batch Inference**: 3-view batch input, 640×640 resize
+
+3. **Module 3 — Triangulation**: Camera calibration + multi-view triangulation + occlusion handling + Kalman smoothing
+
+4. **Module 4 — 3D Feature Engineering**: Convert existing 10 features from 2D→3D
+
+5. **Module 5 — 3-Class Classifier**: Upgrade binary → 3-class (normal/suspected/fall), configurable thresholds
+
+6. **Module 6 — LLM Review**: Qwen3-VL-8B Q4_K_M via llama-cpp-python, trigger on "suspected"
+
+7. **Module 7 — Demo Visualization**: Web UI or OpenCV window showing full pipeline
+
+### Key Architecture Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Multi-view dataset | **Multiple Cameras Fall Dataset (MCFD)** | 8 cameras, 24 scenarios (22 fall+confound, 2 confound only), freely downloadable via Kaggle/Baidu |
+| 3D ground truth | **None — manual visual validation** | Lucas will manually inspect reconstructed 3D skeletons for correctness; no automated MPJPE needed |
+| Camera calibration | **Synthetic/manual parameters** | MCFD has no calibration files; define 3 virtual cameras in code (e.g. -45°/0°/+45°, same height) |
+| LLM model | Qwen3-VL-8B Q4_K_M primary; Qwen3-VL-4B fallback | 8B on 8GB tight (~7.8GB), requires layer offloading; 4B safe at ~3.6GB |
+| LLM framework | llama-cpp-python | Supports Qwen3-VL GGUF + mmproj, CUDA acceleration |
+| Visualization | Gradio web app (preferred) or OpenCV | Quick to build; shows all pipeline stages |
+
+---
+
+## Hardware Constraints & Mitigations
+
+### RTX 3060 Ti 8GB VRAM Budget
+| Component | Size | Notes |
+|-----------|------|-------|
+| YOLOv8n-pose | ~30 MB | Trivial, runs on GPU no problem |
+| BiLSTM+BiGRU | ~17 MB | CPU inference is fine, GPU even better |
+| Qwen3-VL-8B Q4_K_M GGUF | ~5.4 GB | Language model weights |
+| Qwen3-VL mmproj (vision encoder) | ~1.7 GB | Loaded during image encoding |
+| KV Cache (short context) | ~0.2 GB | 1-3 frames, ~500 tokens |
+| CUDA overhead | ~0.5 GB | Driver + framework |
+| **Total** | **~7.8 GB** | ⚠️ Very tight — requires layer offloading |
+
+**Mitigation**: Set `n_gpu_layers` to offload ~5-10 layers to CPU, or use Qwen3-VL-4B (~3.6GB total, fits easily).
+
+---
+
+## Dataset Strategy
+
+### Multi-View Input — MCFD (唯一多视角数据集)
+- **Multiple Cameras Fall Dataset (MCFD)** — 24 scenarios, 8 IP cameras
+  - Kaggle: https://www.kaggle.com/datasets/soumicksarker/multiple-cameras-fall-dataset
+  - 百度AI Studio: https://aistudio.baidu.com/aistudio/datasetdetail/63166
+  - 官网: https://www.iro.umontreal.ca/~labimage/Dataset/ (有反爬保护)
+  - 22 scenarios contain fall + confounding events; 2 scenarios confounding only
+  - **无相机标定参数** → 使用代码中手动定义3个虚拟相机的投影矩阵
+  - **无3D骨骼真值** → 人工目视验证重建效果
+
+### Camera Calibration — 合成参数
+- MCFD 无标定文件，在代码中定义3台虚拟相机：
+  - 同一高度，水平角度 -45°/0°/+45°
+  - 假设分辨率为原始视频分辨率
+  - 焦距和主点使用合理假设值（如 f=1000, cx=w/2, cy=h/2）
+- 标记为 demo 简化处理，非真实标定
+
+### 3D Validation — 人工目视
+- Lucas 手动观察重建出的3D骨架是否合理（关节不飞散、运动轨迹连续）
+- 不做自动化 MPJPE 计算
+- 评估报告中诚实标注"人工目视验证"
+
+### Validation Line B — Fall Classification
+- Reuse existing UR Fall Dataset pipeline (already working)
+- Optional: Extract GMDCSA24 features if time permits
+
+---
+
+## Risk Register
+
+| Risk | Probability | Impact | Mitigation |
+|------|------------|--------|------------|
+| MCFD lacks camera calibration | **Confirmed** | Low | Use synthetic camera params; document as demo simplification |
+| MCFD lacks 3D ground truth | **Confirmed** | Low | Manual visual validation by Lucas; document honestly |
+| Qwen3-VL-8B OOM on 8GB | Medium | Medium | Use Qwen3-VL-4B; document 8B as "production upgrade" |
+| llama-cpp-python vision API changes | Low | Medium | Pin version; test with simple image first |
+| Triangulation visually unconvincing | Low | Medium | Tune synthetic camera params; acceptable for demo |
+| 20-day timeline too tight | Low | High | Priority ordering ensures core pipeline works even if polish is minimal |
+
+---
+
+## Collaboration Protocol
+
+- **Agent role**: Code architecture, implementation, documentation, research
+- **Lucas role**: Editor wiring, testing, dataset download/management, demo rehearsal
+- **Status model**: documented → ported → wired → tested → parity (from Wanderer Tales project)
+- **Communication**: Structured numbered items (A.1, B.1), brief verification checklist per session
+- **This file**: `Docs/Chat.md` is the agent's external memory; read at session start
+
+---
+
+## Quick Reference: Key URLs
+
+- Prompt spec: `Docs/prompt.md`
+- MCFD Kaggle: https://www.kaggle.com/datasets/soumicksarker/multiple-cameras-fall-dataset
+- MCFD 百度AI Studio: https://aistudio.baidu.com/aistudio/datasetdetail/63166
+- MCFD 官网: https://www.iro.umontreal.ca/~labimage/Dataset/
+- Qwen3-VL-8B GGUF: https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF
+- Qwen3-VL-4B GGUF: https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF (fallback)
+- UR Fall Dataset: https://fenix.ur.edu.pl/~mkepski/ds/uf.html (already have cam0)
+- llama-cpp-python: https://github.com/abetlen/llama-cpp-python
