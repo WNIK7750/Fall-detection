@@ -66,14 +66,28 @@
 - After pipeline works end-to-end, evaluate if 8B upgrade is worthwhile
 
 ### Pipeline Progress
-| Module | Status |
-|--------|--------|
-| M2: YOLOv8 Batch | 🔨 Building now |
-| M3: Triangulation | ⏳ |
-| M4: 3D Features | ⏳ |
-| M5: 3-Class Classifier | ⏳ |
-| M6: LLM Review | ⏳ |
-| M7: Visualization | ⏳ |
+| Module | Status | Files |
+|--------|--------|-------|
+| M2: YOLOv8 Batch | ✅ | `pipeline/video_reader.py`, `pose_inference.py` |
+| M3: Triangulation | ✅ | `pipeline/calibration.py` (real MCFD params), `triangulation.py` |
+| M4: 3D Features | ✅ | `pipeline/features_3d.py` (10-D, floor-adaptive) |
+| M5: 3-Class Classifier | ✅ | `pipeline/classifier.py`, `extract_dataset_3d.py`, `train_3d.py` |
+| M6: LLM Review | ✅ | `pipeline/llm_reviewer.py` (Qwen3-VL-4B, loaded & tested) |
+| M7: Demo | ✅ | `demo_multiview.py` (full pipeline with OpenCV viz) |
+
+### Remaining
+- Run `extract_dataset_3d.py` → extract training features from MCFD
+- Run `train_3d.py` → train classifier checkpoint
+- Test full pipeline: `python demo_multiview.py --scenario 1 --llm`
+- Prepare demo materials (test videos, script)
+- Update README
+
+### Safe from Git (large files)
+- `features/3d/` — generated .npy for training (.gitignore)
+- `checkpoints/enhanced_3d_*/` — new training checkpoints (.gitignore)
+- `models/llm/*.gguf` — LLM weights (.gitignore)
+- `dataset/mcfd/` — video files (.gitignore)
+- `results/debug_pose.png` — debug output (.gitignore)
 
 ---
 
