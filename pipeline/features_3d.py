@@ -104,7 +104,10 @@ def compute_features(skeleton_3d: np.ndarray, prev_skeleton: np.ndarray | None =
     spine_vec = mid_shoulder - mid_hip
     spine_len = np.linalg.norm(spine_vec)
 
-    head_pt = skeleton_3d[NOSE]
+    head_pt = skeleton_3d[NOSE].copy()
+    # Fallback: use mid-shoulder if nose is NaN (occluded/undetected)
+    if np.isnan(head_pt).any():
+        head_pt = mid_shoulder.copy()
 
     # --- F1: 3D 宽高比 (width/height in XZ plane) ---
     valid = skeleton_3d[~np.isnan(skeleton_3d).any(axis=1)]

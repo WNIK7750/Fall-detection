@@ -132,9 +132,9 @@ class HeuristicClassifier:
 
     def __init__(
         self,
-        com_ratio_threshold: float = 0.4,
-        spine_z_threshold: float = 0.5,
-        velocity_threshold: float = 0.3,
+        com_ratio_threshold: float = 0.55,
+        spine_z_threshold: float = 0.6,
+        velocity_threshold: float = 0.2,
     ):
         """
         Args:

@@ -60,38 +60,40 @@ def draw_status_bar(img: np.ndarray, text: str, color: tuple[int, int, int]) -> 
 
 
 def draw_3d_skeleton(img: np.ndarray, skeleton_3d: np.ndarray, size: int = 200) -> np.ndarray:
-    """Draw a miniature 3D skeleton on a 2D canvas (top-down + side view)."""
+    """Draw a miniature 3D skeleton (top-down view)."""
     from pipeline.pose_inference import SKELETON_EDGES
 
     canvas = np.zeros((size, size, 3), dtype=np.uint8)
-    if np.isnan(skeleton_3d).all():
+
+    # Replace NaN nose with mid-shoulder for visualization
+    skel = skeleton_3d.copy()
+    if np.isnan(skel[0]).any() and not np.isnan(skel[5]).any() and not np.isnan(skel[6]).any():
+        skel[0] = (skeleton_3d[5] + skeleton_3d[6]) / 2.0
+
+    if np.isnan(skel).all():
         cv2.putText(canvas, "No 3D data", (20, size//2),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, WHITE, 1)
         return canvas
 
-    # Project 3D to 2D for mini view
-    valid = skeleton_3d[~np.isnan(skeleton_3d).any(axis=1)]
+    valid = skel[~np.isnan(skel).any(axis=1)]
     if len(valid) < 2:
         return canvas
 
-    # Top-down view (X-Z plane)
-    xs = valid[:, 0]
-    zs = valid[:, 2]
-    x_range = xs.max() - xs.min() + 1e-6
-    z_range = zs.max() - zs.min() + 1e-6
+    xs, zs = valid[:, 0], valid[:, 2]
+    x_range, z_range = xs.max() - xs.min() + 1e-6, zs.max() - zs.min() + 1e-6
     scale = min((size - 20) / max(x_range, z_range), 50)
     ox, oy = size // 2, size // 2
 
     for (i, j) in SKELETON_EDGES:
-        if i < len(skeleton_3d) and j < len(skeleton_3d):
-            if not np.isnan(skeleton_3d[i]).any() and not np.isnan(skeleton_3d[j]).any():
-                pt1 = (int(ox + skeleton_3d[i, 0] * scale), int(oy - skeleton_3d[i, 2] * scale))
-                pt2 = (int(ox + skeleton_3d[j, 0] * scale), int(oy - skeleton_3d[j, 2] * scale))
+        if i < len(skel) and j < len(skel):
+            if not np.isnan(skel[i]).any() and not np.isnan(skel[j]).any():
+                pt1 = (int(ox + skel[i, 0] * scale), int(oy - skel[i, 2] * scale))
+                pt2 = (int(ox + skel[j, 0] * scale), int(oy - skel[j, 2] * scale))
                 cv2.line(canvas, pt1, pt2, GREEN, 1)
 
-    for i in range(min(len(skeleton_3d), 17)):
-        if not np.isnan(skeleton_3d[i]).any():
-            pt = (int(ox + skeleton_3d[i, 0] * scale), int(oy - skeleton_3d[i, 2] * scale))
+    for i in range(min(len(skel), 17)):
+        if not np.isnan(skel[i]).any():
+            pt = (int(ox + skel[i, 0] * scale), int(oy - skel[i, 2] * scale))
             cv2.circle(canvas, pt, 2, RED, -1)
 
     cv2.putText(canvas, "3D (top-down)", (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, WHITE, 1)

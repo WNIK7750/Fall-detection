@@ -80,14 +80,34 @@ class PoseDetector:
 
         for r in results:
             if r.keypoints is None or r.keypoints.xy is None or len(r.keypoints.xy) == 0:
-                # No person detected
                 all_keypoints.append(np.zeros((17, 3), dtype=np.float32))
                 continue
 
-            kp = r.keypoints.xy[0].cpu().numpy()  # (17, 2) — first person
-            conf = r.keypoints.conf[0].cpu().numpy()  # (17,)  — confidence
+            # Select the person closest to image center (handles multiple people)
+            kps_all = r.keypoints.xy.cpu().numpy()  # (P, 17, 2)
+            confs_all = r.keypoints.conf.cpu().numpy()  # (P, 17)
+            img_w = r.orig_shape[1] if hasattr(r, 'orig_shape') else 640
+            img_h = r.orig_shape[0] if hasattr(r, 'orig_shape') else 640
 
-            # Combine into (17, 3): x, y, conf
+            if len(kps_all) == 1:
+                best_idx = 0
+            else:
+                # Pick person closest to image center
+                centers = []
+                for p in range(len(kps_all)):
+                    valid = confs_all[p] > 0.3
+                    if valid.any():
+                        cx = kps_all[p][valid, 0].mean()
+                        cy = kps_all[p][valid, 1].mean()
+                        dist = ((cx - img_w/2)**2 + (cy - img_h/2)**2)**0.5
+                        centers.append(dist)
+                    else:
+                        centers.append(1e9)
+                best_idx = int(np.argmin(centers))
+
+            kp = kps_all[best_idx]
+            conf = confs_all[best_idx]
+
             kp_with_conf = np.column_stack([kp, conf]).astype(np.float32)
             all_keypoints.append(kp_with_conf)
 
