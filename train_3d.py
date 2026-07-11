@@ -196,11 +196,14 @@ def train(args):
     with open(os.path.join(ckpt_dir, "history.json"), "w") as f:
         json.dump(history, f, indent=2)
 
-    # Test set evaluation
+    # Test set evaluation (optional — skip if no test data)
     test_path = os.path.join(feats_dir, "test", "X.npy")
-    if os.path.exists(test_path):
+    if os.path.exists(test_path) and os.path.getsize(test_path) > 128:
         X_test = np.load(test_path)
         y_test = np.load(os.path.join(feats_dir, "test", "y.npy"))
+        if len(y_test) == 0:
+            print("\n(Test set empty, skipping evaluation)")
+            return
         X_test_2d = X_test.transpose(0, 2, 1).reshape(-1, F)
         X_test_scaled = scaler.transform(X_test_2d).reshape(len(y_test), T, F)
 

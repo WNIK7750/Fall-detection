@@ -1,16 +1,12 @@
 """
-Extract 3D features from MCFD for training the 3-class fall classifier.
+Extract 3D features from MCFD for fall classifier training.
 
-Pipeline per scenario:
-  MCFD videos → YOLOv8n-pose (3-view) → Triangulation → 3D Features → .npy
-
-Split: scenarios 1-17 train, 18-19 val, 20-22 test (~77/9/14%)
-Label: any 20-frame window containing a fall frame = class 1 (fall), else 0 (normal).
+Strategy: process frames around annotated fall segments (with context),
+          plus a downsample of normal frames for balance.
 
 Usage:
-    python extract_dataset_3d.py                # extract all
-    python extract_dataset_3d.py --limit 5      # extract first 5 scenarios only
-    python extract_dataset_3d.py --skip-train   # skip already-extracted train set
+    python extract_dataset_3d.py              # full extraction
+    python extract_dataset_3d.py --fast       # fall segments only (quick)
 """
 
 import os
@@ -25,97 +21,105 @@ from pipeline.triangulation import Triangulator, KalmanSmoother
 from pipeline.features_3d import extract_window
 
 
-def extract_scenario(
+def extract_frames(
     data_root: str,
     scenario: int,
     camera_ids: list[int],
     detector: PoseDetector,
     tri: Triangulator,
-    annotations: list[dict],
-    max_frames: int = 0,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Extract features and labels from one MCFD scenario.
-
-    Returns:
-        X: (N, 10, 20) feature windows.
-        y: (N,) binary labels (0=normal, 1=fall).
-    """
+    frame_ranges: list[tuple[int, int]],
+) -> list[np.ndarray]:
+    """Extract 3D skeletons from specific frame ranges."""
     smoother = KalmanSmoother()
     all_skeletons = []
 
-    with MCFDReader(data_root, scenario, camera_ids) as reader:
-        total = reader.total_frames
-        if max_frames > 0:
-            total = min(total, max_frames)
+    for start, end in frame_ranges:
+        with MCFDReader(data_root, scenario, camera_ids,
+                        start_frame=start, end_frame=end) as reader:
+            for frames in reader:
+                kps = detector.infer_batch(frames)
+                skel = tri.triangulate(kps)
+                skel = smoother.update(skel)
+                all_skeletons.append(skel)
 
-        for i, frames in enumerate(reader):
-            if max_frames > 0 and i >= max_frames:
-                break
-            kps = detector.infer_batch(frames)
-            skel = tri.triangulate(kps)
-            skel = smoother.update(skel)
-            all_skeletons.append(skel)
+    return all_skeletons
 
-    # Extract sliding windows (subsample every 3rd frame: 120fps→40fps)
-    X, frame_starts = extract_window(all_skeletons, window_size=20, stride=5, subsample=3)
 
-    if len(X) == 0:
-        return np.empty((0, 10, 20)), np.empty((0,))
-
-    # Label windows based on data_tuple3.csv annotations
-    fall_segments = find_fall_segments(annotations, scenario)
+def label_windows(
+    X: np.ndarray,
+    frame_starts: list[int],
+    fall_segments: list[tuple[int, int]],
+    offset: int = 0,
+) -> np.ndarray:
+    """Label windows: 1 if any overlap with a fall segment."""
     y = np.zeros(len(X), dtype=np.int64)
-
-    for i, start_frame in enumerate(frame_starts):
-        end_frame = start_frame + 20 * 3  # window covers ~60 original frames
+    for i, start in enumerate(frame_starts):
+        end = start + 20 * 3  # 20-frame window, subsample=3 → ~60 original frames
         for fs_start, fs_end in fall_segments:
-            if not (end_frame < fs_start or start_frame > fs_end):
+            if not (end < fs_start or (start - offset) > fs_end):
                 y[i] = 1
                 break
-
-    return X, y
+    return y
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=0, help="Max scenarios to process")
-    parser.add_argument("--max-frames", type=int, default=800, help="Max frames per scenario")
+    parser.add_argument("--fast", action="store_true", help="Fall segments only (fast)")
+    parser.add_argument("--context", type=int, default=150, help="Context frames around fall")
     args = parser.parse_args()
 
     data_root = os.path.join(os.path.dirname(__file__), "dataset", "mcfd")
     camera_ids = [1, 4, 7]
 
-    # Split: train=1-17, val=18-19, test=20-22
     splits = {"train": range(1, 18), "val": range(18, 20), "test": range(20, 23)}
-    scenario_limit = args.limit
+    annotations = load_annotations(data_root)
 
-    print("Initializing...")
+    print("Initializing YOLO + Triangulation...")
     detector = PoseDetector()
     from pipeline.calibration import DEFAULT_PROJECTIONS
     tri = Triangulator(DEFAULT_PROJECTIONS)
-    annotations = load_annotations(data_root)
 
     for split_name, scenario_range in splits.items():
         X_all, y_all = [], []
+        ctx = args.context
 
         for s in scenario_range:
-            if scenario_limit and s > scenario_limit:
-                break
+            fall_segs = find_fall_segments(annotations, s)
+            print(f"  [{split_name}] Scenario {s:2d}: {len(fall_segs)} fall segs "
+                  f"@ {[f'{a}-{b}' for a,b in fall_segs[:3]]}...", end=" ", flush=True)
 
-            print(f"  [{split_name}] Scenario {s:2d}...", end=" ", flush=True)
-            X, y = extract_scenario(data_root, s, camera_ids, detector, tri,
-                                    annotations, max_frames=args.max_frames)
-            if len(X) > 0:
-                X_all.append(X)
-                y_all.append(y)
-                n_fall = int(y.sum())
-                print(f"{len(X)} windows ({n_fall} falls)")
+            if args.fast and fall_segs:
+                # Only fall segments + context
+                ranges = []
+                for fs_start, fs_end in fall_segs:
+                    ranges.append((max(0, fs_start - ctx), fs_end + ctx))
+                skeletons = extract_frames(data_root, s, camera_ids,
+                                           detector, tri, ranges)
+                offset = ranges[0][0] if ranges else 0
+                X, indices = extract_window(skeletons, window_size=20,
+                                            stride=5, subsample=3)
+                if len(X) > 0:
+                    y = label_windows(X, indices, fall_segs, offset)
+                    X_all.append(X)
+                    y_all.append(y)
             else:
-                print("0 windows (skipped)")
+                # Full scenario (or --fast with no fall segs)
+                skeletons = extract_frames(data_root, s, camera_ids,
+                                           detector, tri, [(0, 800)])
+                X, indices = extract_window(skeletons, window_size=20,
+                                            stride=5, subsample=3)
+                if len(X) > 0:
+                    y = label_windows(X, indices, fall_segs)
+                    X_all.append(X)
+                    y_all.append(y)
+
+            n_fall = int(y_all[-1].sum()) if y_all else 0
+            n_total = len(y_all[-1]) if y_all else 0
+            print(f"{n_total} windows ({n_fall} falls)")
 
         if X_all:
-            X_out = np.concatenate(X_all, axis=0)
-            y_out = np.concatenate(y_all, axis=0)
+            X_out = np.concatenate(X_all)
+            y_out = np.concatenate(y_all)
         else:
             X_out = np.empty((0, 10, 20))
             y_out = np.empty((0,))
@@ -124,9 +128,10 @@ def main():
         os.makedirs(out_dir, exist_ok=True)
         np.save(os.path.join(out_dir, "X.npy"), X_out)
         np.save(os.path.join(out_dir, "y.npy"), y_out)
-        print(f"  Saved {len(X_out)} windows to {out_dir}/")
+        pos = int(y_out.sum()) if len(y_out) > 0 else 0
+        print(f"  Saved {len(X_out)} windows ({pos} falls) → {out_dir}/")
 
-    print("\nDone. Run train_3d.py to train the classifier.")
+    print("\nDone. Next: python train_3d.py")
 
 
 if __name__ == "__main__":
