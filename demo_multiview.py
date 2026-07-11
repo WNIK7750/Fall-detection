@@ -178,57 +178,73 @@ def run_demo(args):
             frame_idx += 1
             t_start = time.time()
 
-            # 1. YOLO pose detection
-            kps = detector.infer_batch(frames)
+            # 1. YOLO pose detection — ALL persons per view
+            people_per_view = detector.infer_batch_all(frames)
+            num_people = max(max(len(v) for v in people_per_view), 1)
 
-            # 2. Triangulation
-            skel = tri.triangulate(kps)
-            skel = smoother.update(skel)
+            # Process each person
+            all_statuses = []
+            for pid in range(num_people):
+                person_kps = [people_per_view[v][pid] if pid < len(people_per_view[v])
+                              else np.zeros((17, 3), dtype=np.float32) for v in range(3)]
 
-            # 3. Features
-            features = compute_features(skel, skeleton_history[-1] if skeleton_history else None)
-            if features is not None:
-                feature_history.append(features)
-            skeleton_history.append(skel.copy())
+                # 2. Triangulation
+                skel = tri.triangulate(person_kps)
+                skel = smoother.update(skel)
 
-            # 4. Classification (every stride=5 frames)
-            cls_result = None
-            if classifier and len(feature_history) >= 20 and frame_idx % 5 == 0:
-                # Take last 20 features as (20, 10) = (seq_len, input_size)
-                window = np.array(list(feature_history)[-20:])
-                cls_result = classifier.predict(window)
-                current_status = cls_result["class_name"]
+                # 3. Features
+                features = compute_features(skel, skeleton_history[-1] if skeleton_history else None)
+                if features is not None:
+                    feature_history.append(features)
+                skeleton_history.append(skel.copy())
 
-            # 5. LLM Review (on "suspected")
+                # 4. Classification (every stride=5 frames)
+                cls_result = None
+                status = "normal"
+                if classifier and len(feature_history) >= 20 and frame_idx % 5 == 0:
+                    window = np.array(list(feature_history)[-20:])
+                    cls_result = classifier.predict(window)
+                    status = cls_result["class_name"]
+                all_statuses.append(status)
+
+                if pid == 0:
+                    current_status = status
+
+            # 5. LLM Review (on "suspected" for main person)
             if current_status == "suspected" and reviewer and reviewer.ready:
-                # Capture keyframes from buffer
                 if len(frame_buffer) >= 3:
                     llm_result = reviewer.review(frame_buffer[-3:])
                     if llm_result.get("is_fall"):
                         current_status = "fall"
                     elif llm_result.get("is_fall") is False:
                         current_status = "normal"
-                frame_buffer = []  # reset buffer after review
+                frame_buffer = []
 
-            # Buffer frames for LLM (keep last few seconds)
-            frame_buffer.append(frames[1].copy())  # center camera
+            frame_buffer.append(frames[1].copy())
             if len(frame_buffer) > 10:
                 frame_buffer.pop(0)
 
-            # 6. Visualization
+            # 6. Visualization — draw ALL persons
             vis_frames = []
-            for v, (frame, kp) in enumerate(zip(frames, kps)):
-                vis = MultiViewPoseVisualizer.draw_keypoints(frame, kp)
-                # Status bar
-                status_color = {"normal": GREEN, "suspected": YELLOW, "fall": RED}.get(current_status, WHITE)
-                status_text = f"Cam{camera_ids[v]} | Frame {frame_idx} | {current_status.upper()}"
-                if cls_result:
-                    status_text += f" (P_fall={cls_result['fall_prob']:.2f})"
-                vis = draw_status_bar(vis, status_text, status_color)
+            for v, frame in enumerate(frames):
+                vis = frame.copy()
+                # Draw each person with different color
+                colors = [GREEN, (255, 255, 0), (0, 255, 255), (255, 0, 255)]
+                for pid in range(num_people):
+                    if pid < len(people_per_view[v]):
+                        kp = people_per_view[v][pid]
+                        vis = MultiViewPoseVisualizer.draw_keypoints(vis, kp)
+
+                status_text = f"Cam{camera_ids[v]} | F{frame_idx} | {current_status.upper()} | {num_people}p"
+                vis = draw_status_bar(vis, status_text,
+                    {"normal": GREEN, "suspected": YELLOW, "fall": RED}.get(current_status, WHITE))
                 vis_frames.append(vis)
 
-            # Add 3D skeleton mini-view (resized to match frame height)
-            skel_vis = draw_3d_skeleton(np.zeros((200, 200, 3), dtype=np.uint8), skel)
+            # 3D mini-view for main person (pid=0)
+            main_kps = [people_per_view[v][0] if len(people_per_view[v]) > 0
+                        else np.zeros((17,3), dtype=np.float32) for v in range(3)]
+            main_skel = tri.triangulate(main_kps)
+            skel_vis = draw_3d_skeleton(np.zeros((200, 200, 3), dtype=np.uint8), main_skel)
             skel_vis = cv2.resize(skel_vis, (vis_frames[0].shape[1], vis_frames[0].shape[0]))
             vis_frames.append(skel_vis)
 

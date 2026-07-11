@@ -113,6 +113,45 @@ class PoseDetector:
 
         return all_keypoints
 
+    def infer_batch_all(self, frames: list[np.ndarray]) -> list[list[np.ndarray]]:
+        """Run pose detection, return ALL persons per view.
+
+        Returns:
+            List of lists: [view0_persons, view1_persons, view2_persons]
+            Each person is (17, 3) — (x, y, conf). Sorted by distance to center.
+        """
+        results = self.model(frames, device=self.device, verbose=False)
+        all_persons: list[list[np.ndarray]] = []
+
+        for r in results:
+            if r.keypoints is None or r.keypoints.xy is None or len(r.keypoints.xy) == 0:
+                all_persons.append([])
+                continue
+
+            kps_all = r.keypoints.xy.cpu().numpy()  # (P, 17, 2)
+            confs_all = r.keypoints.conf.cpu().numpy()  # (P, 17)
+            img_w = r.orig_shape[1] if hasattr(r, 'orig_shape') else 640
+            img_h = r.orig_shape[0] if hasattr(r, 'orig_shape') else 640
+
+            # Sort by distance to center (closest first)
+            persons = []
+            scores = []
+            for p in range(len(kps_all)):
+                kp = np.column_stack([kps_all[p], confs_all[p]]).astype(np.float32)
+                persons.append(kp)
+                valid = confs_all[p] > 0.3
+                if valid.any():
+                    cx, cy = kps_all[p][valid, 0].mean(), kps_all[p][valid, 1].mean()
+                    scores.append(((cx - img_w/2)**2 + (cy - img_h/2)**2)**0.5)
+                else:
+                    scores.append(1e9)
+
+            # Sort closest first
+            order = np.argsort(scores)
+            all_persons.append([persons[i] for i in order])
+
+        return all_persons
+
     def infer_single(self, frame: np.ndarray) -> np.ndarray:
         """Run on single frame, returns (17, 3)."""
         return self.infer_batch([frame])[0]
