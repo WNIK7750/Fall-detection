@@ -173,6 +173,7 @@ def run_demo(args):
     frame_buffer: list = []  # for LLM review context
 
     current_status = "normal"
+    current_quality = 1.0
     llm_result = None
     paused = False
     frame_idx = 0
@@ -227,6 +228,7 @@ def run_demo(args):
                 if track_id not in person_states:
                     person_states[track_id] = {
                         'features': deque(maxlen=60),
+                        'qualities': deque(maxlen=60),
                         'skeletons': deque(maxlen=60),
                         'floor_estimator': FloorEstimator(),
                         'smoother': KalmanSmoother(),
@@ -249,8 +251,10 @@ def run_demo(args):
                         person_kps.append(np.zeros((17, 3), dtype=np.float32))
 
                 # Triangulation
-                skel = tri.triangulate(person_kps)
-                skel = pstate['smoother'].update(skel)
+                raw_skel = tri.triangulate(person_kps)
+                quality = tri.compute_quality(person_kps, raw_skel)
+                pstate['qualities'].append(quality)
+                skel = pstate['smoother'].update(raw_skel)
 
                 if pidx == 0:
                     main_skel = skel.copy()
@@ -272,11 +276,16 @@ def run_demo(args):
                     window = np.array(list(pstate['features'])[-20:])
                     cls_result = classifier.predict(window)
                     status = cls_result["class_name"]
+                    recent_quality = [q["score"] for q in list(pstate['qualities'])[-20:]]
+                    mean_quality = float(np.mean(recent_quality)) if recent_quality else 0.0
+                    if mean_quality < args.quality_threshold and status == "fall":
+                        status = "suspected"
                 pstate['status'] = status
                 all_statuses.append(status)
 
                 if pidx == 0:
                     current_status = status
+                    current_quality = quality["score"]
 
             # 4. LLM Review (on "suspected" for main person)
             if current_status == "suspected" and reviewer and reviewer.ready:
@@ -314,7 +323,9 @@ def run_demo(args):
                 for pidx, (track_id, _) in enumerate(view0_tracks):
                     s = all_statuses[pidx] if pidx < len(all_statuses) else "?"
                     status_parts.append(f"T{track_id}:{s}")
-                status_text = f"Cam{camera_ids[v]} | F{frame_idx} | {current_status.upper()} | {' '.join(status_parts)}"
+                status_text = (f"Cam{camera_ids[v]} | F{frame_idx} | "
+                               f"{current_status.upper()} | Q={current_quality:.2f} | "
+                               f"{' '.join(status_parts)}")
                 vis = draw_status_bar(vis, status_text,
                     {"normal": GREEN, "suspected": YELLOW, "fall": RED}.get(current_status, WHITE))
                 vis_frames.append(vis)
@@ -370,6 +381,8 @@ if __name__ == "__main__":
     parser.add_argument("--threshold-high", type=float, default=0.85)
     parser.add_argument("--max-people", type=int, default=1,
                         help="Maximum people to triangulate; 1 avoids unreliable cross-view ID matching")
+    parser.add_argument("--quality-threshold", type=float, default=0.45,
+                        help="Mean recent skeleton quality below this downgrades fall to suspected")
     parser.add_argument("--llm", action="store_true", help="Enable LLM review")
     parser.add_argument("--output", type=str, default=None, help="Output video file")
     args = parser.parse_args()

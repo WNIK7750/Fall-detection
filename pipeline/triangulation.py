@@ -60,6 +60,73 @@ class Triangulator:
 
         return skeleton_3d
 
+    def compute_quality(
+        self,
+        keypoints_2d: list[np.ndarray],
+        skeleton_3d: np.ndarray,
+    ) -> dict:
+        """Estimate measurement quality for a triangulated skeleton.
+
+        This is a confidence heuristic for demo gating and visual QA. It is not
+        a ground-truth probability.
+        """
+        from pipeline.calibration import project_3d_to_2d
+
+        if len(keypoints_2d) != len(self.P):
+            raise ValueError(f"Expected {len(self.P)} views, got {len(keypoints_2d)}")
+
+        conf_stack = np.stack([kp[:, 2] for kp in keypoints_2d], axis=0)
+        view_counts = (conf_stack > self.conf_threshold).sum(axis=0)
+        valid_3d = ~np.isnan(skeleton_3d).any(axis=1)
+
+        valid_joint_ratio = float(valid_3d.mean())
+        multiview_joint_ratio = float((view_counts >= 2).mean())
+        mean_views_per_joint = float(view_counts.mean())
+
+        observed = conf_stack[conf_stack > self.conf_threshold]
+        mean_conf = float(observed.mean()) if observed.size else 0.0
+
+        core_indices = [0, 5, 6, 11, 12]
+        core_valid_ratio = float(valid_3d[core_indices].mean())
+
+        reproj_errors = []
+        for j in range(17):
+            if not valid_3d[j]:
+                continue
+            pt_3d = skeleton_3d[j]
+            for v, kp in enumerate(keypoints_2d):
+                if kp[j, 2] <= self.conf_threshold:
+                    continue
+                uv = project_3d_to_2d(pt_3d, self.P[v])
+                err = float(np.linalg.norm(uv - kp[j, :2]))
+                if np.isfinite(err):
+                    reproj_errors.append(err)
+
+        reproj_error_px = float(np.mean(reproj_errors)) if reproj_errors else float("nan")
+        if np.isnan(reproj_error_px):
+            reproj_score = 0.0
+        else:
+            # 20 px is good, 80+ px is poor for 640x640 YOLO-space frames.
+            reproj_score = float(np.clip(1.0 - reproj_error_px / 80.0, 0.0, 1.0))
+
+        score = (
+            0.30 * valid_joint_ratio +
+            0.25 * multiview_joint_ratio +
+            0.20 * core_valid_ratio +
+            0.15 * mean_conf +
+            0.10 * reproj_score
+        )
+
+        return {
+            "score": float(np.clip(score, 0.0, 1.0)),
+            "valid_joint_ratio": valid_joint_ratio,
+            "multiview_joint_ratio": multiview_joint_ratio,
+            "mean_views_per_joint": mean_views_per_joint,
+            "mean_conf": mean_conf,
+            "core_valid_ratio": core_valid_ratio,
+            "reproj_error_px": reproj_error_px,
+        }
+
     def _triangulate_one_point(
         self,
         keypoints_2d: list[np.ndarray],

@@ -27,6 +27,7 @@ models/llm/*.gguf
 
 # Auto-generated debug outputs
 results/debug_pose.png
+results/qa_pose_3d/
 
 # Generated 3D features (.npy files, ~MBs)
 features/3d/
