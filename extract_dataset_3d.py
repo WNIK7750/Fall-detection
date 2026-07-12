@@ -33,6 +33,21 @@ WINDOW_SIZE = 20
 FALL_CONTEXT = 200     # frames before/after fall segment to include
 TIME_BATCH_SIZE = 64   # timesteps per YOLO call before flattening views
 
+SPLIT_PRESETS = {
+    # More balanced by fall-event count than the original chronological split.
+    # Scenario 24 has no fall and is kept in train to increase normal coverage.
+    "balanced": {
+        "train": [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 24],
+        "val": [4, 17, 19, 22],
+        "test": [18, 20, 21, 23],
+    },
+    "chronological": {
+        "train": list(range(1, 19)),
+        "val": list(range(19, 21)),
+        "test": list(range(21, 24)),
+    },
+}
+
 
 def merge_frame_ranges(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
     """Merge overlapping or touching [start, end) frame ranges."""
@@ -71,6 +86,7 @@ def extract_and_window(
     data_root, scenario, camera_ids, detector, tri,
     frame_ranges, fall_segs, subsample, stride,
     time_batch_size: int = TIME_BATCH_SIZE,
+    min_quality: float = 0.35,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Extract skeletons and build windows for given frame ranges."""
     X_parts = []
@@ -103,8 +119,12 @@ def extract_and_window(
                         undistort_keypoints(flat_kps[t * num_views + v], camera_ids[v])
                         for v in range(num_views)
                     ]
-                    skel = tri.triangulate(kps)
-                    skel = smoother.update(skel)
+                    raw_skel = tri.triangulate(kps)
+                    quality = tri.compute_quality(kps, raw_skel)
+                    if quality["score"] >= min_quality:
+                        skel = smoother.update(raw_skel)
+                    else:
+                        skel = np.full((17, 3), np.nan, dtype=np.float64)
                     range_skeletons.append(skel)
                 time_batch = []
 
@@ -118,8 +138,12 @@ def extract_and_window(
                         undistort_keypoints(flat_kps[t * num_views + v], camera_ids[v])
                         for v in range(num_views)
                     ]
-                    skel = tri.triangulate(kps)
-                    skel = smoother.update(skel)
+                    raw_skel = tri.triangulate(kps)
+                    quality = tri.compute_quality(kps, raw_skel)
+                    if quality["score"] >= min_quality:
+                        skel = smoother.update(raw_skel)
+                    else:
+                        skel = np.full((17, 3), np.nan, dtype=np.float64)
                     range_skeletons.append(skel)
 
         if not range_skeletons:
@@ -153,6 +177,12 @@ def main():
                         help="Timesteps collected before each YOLO call")
     parser.add_argument("--max-normal", type=int, default=120,
                         help="Maximum normal windows kept per scenario")
+    parser.add_argument("--min-quality", type=float, default=0.35,
+                        help="Minimum skeleton quality for training extraction")
+    parser.add_argument("--pose-fallback", action="store_true",
+                        help="Enable relaxed YOLO fallback during extraction (not recommended)")
+    parser.add_argument("--split-preset", choices=sorted(SPLIT_PRESETS), default="balanced",
+                        help="Scenario split preset")
     parser.add_argument("--skip-existing", action="store_true",
                         help="Skip a split if X.npy and y.npy already exist")
     args = parser.parse_args()
@@ -160,11 +190,16 @@ def main():
     data_root = os.path.join(os.path.dirname(__file__), "dataset", "mcfd")
     camera_ids = [1, 4, 7]
 
-    splits = {"train": range(1, 19), "val": range(19, 21), "test": range(21, 24)}
+    splits = SPLIT_PRESETS[args.split_preset]
+    print(f"Using split preset: {args.split_preset} → {splits}")
     annotations = load_annotations(data_root)
 
     print("Initializing YOLO + Triangulation...")
-    detector = PoseDetector(device=args.device, infer_batch_size=args.yolo_batch)
+    detector = PoseDetector(
+        device=args.device,
+        infer_batch_size=args.yolo_batch,
+        enable_fallback=args.pose_fallback,
+    )
     from pipeline.calibration import DEFAULT_PROJECTIONS
     tri = Triangulator(DEFAULT_PROJECTIONS)
 
@@ -202,6 +237,7 @@ def main():
                     fall_ranges, fall_segs,
                     subsample=FALL_SUBSAMPLE, stride=FALL_STRIDE,
                     time_batch_size=args.time_batch,
+                    min_quality=args.min_quality,
                 )
                 # Only keep fall-labeled windows — context frames are NOT normal
                 if len(Xf) > 0:
@@ -231,6 +267,7 @@ def main():
                         norm_ranges, fall_segs,
                         subsample=NORM_SUBSAMPLE, stride=NORM_STRIDE,
                         time_batch_size=args.time_batch,
+                        min_quality=args.min_quality,
                     )
                     # Cap normal windows per scenario to keep balance reasonable
                     max_norm = args.max_normal
@@ -249,6 +286,7 @@ def main():
                     [(0, 600)], fall_segs=None or [],
                     subsample=NORM_SUBSAMPLE, stride=NORM_STRIDE,
                     time_batch_size=args.time_batch,
+                    min_quality=args.min_quality,
                 )
                 if len(Xn) > 0:
                     X_scenario.append(Xn)

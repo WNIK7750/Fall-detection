@@ -42,7 +42,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_3D_CHECKPOINT = os.path.join(
     BASE_DIR,
     "checkpoints",
-    "enhanced_3d_20260712_153223",
+    "enhanced_3d_20260712_185406",
     "best_model.pth",
 )
 
@@ -384,8 +384,8 @@ if __name__ == "__main__":
     parser.add_argument("--cameras", type=int, nargs="+", default=[1, 4, 7], help="Camera IDs")
     parser.add_argument("--checkpoint", type=str, default=DEFAULT_3D_CHECKPOINT,
                         help="Classifier checkpoint path")
-    parser.add_argument("--threshold-low", type=float, default=0.4)
-    parser.add_argument("--threshold-high", type=float, default=0.85)
+    parser.add_argument("--threshold-low", type=float, default=0.30)
+    parser.add_argument("--threshold-high", type=float, default=0.40)
     parser.add_argument("--max-people", type=int, default=1,
                         help="Maximum people to triangulate; 1 avoids unreliable cross-view ID matching")
     parser.add_argument("--quality-threshold", type=float, default=0.45,

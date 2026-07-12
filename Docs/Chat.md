@@ -1,6 +1,6 @@
 # Fall Detection Project — Agent External Memory
 
-> Last updated: 2026-07-12 | Agent: CodeBuddy (Deepseek-V4-Pro)
+> Last updated: 2026-07-12 | Agent: Codex GPT-5
 
 ---
 
@@ -68,19 +68,17 @@
 ### Pipeline Progress
 | Module | Status | Files |
 |--------|--------|-------|
-| M2: YOLOv8 Batch | ✅ | `pipeline/video_reader.py`, `pose_inference.py` |
-| M3: Triangulation | ✅ | `pipeline/calibration.py` (real MCFD params), `triangulation.py` |
+| M2: YOLOv8 Batch | ✅ | `pipeline/video_reader.py`, `pose_inference.py`; raw-frame YOLO, keypoints undistorted before triangulation |
+| M3: Triangulation | ✅ | `pipeline/calibration.py` (B-MCFD/Auvinet calibration), `triangulation.py`; reprojection refinement off by default |
 | M4: 3D Features | ✅ | `pipeline/features_3d.py` (10-D, floor-adaptive) |
-| M5: 3-Class Classifier | ✅ | `pipeline/classifier.py`, `extract_dataset_3d.py`, `train_3d.py` |
-| M6: LLM Review | ✅ | `pipeline/llm_reviewer.py` (Qwen3-VL-4B, loaded & tested) |
-| M7: Demo | ✅ | `demo_multiview.py` (full pipeline with OpenCV viz) |
+| M5: 3-Class Classifier | ✅ | `pipeline/classifier.py`, `extract_dataset_3d.py`, `train_3d.py`; best checkpoint `enhanced_3d_20260712_185406` |
+| M6: LLM Review | ⚠️ Next | `pipeline/llm_reviewer.py`; needs end-to-end demo integration test |
+| M7: Demo | ✅ | `demo_multiview.py` (OpenCV viz, quality gating, default checkpoint set) |
 
 ### Remaining
-- Run `extract_dataset_3d.py` → extract training features from MCFD
-- Run `train_3d.py` → train classifier checkpoint
-- Test full pipeline: `python demo_multiview.py --scenario 1 --llm`
-- Prepare demo materials (test videos, script)
-- Update README
+- Wire/test LLM review in full demo: `python demo_multiview.py --scenario 1 --llm`
+- Prepare demo materials (scenarios, clips, script)
+- Update README with current 3D pipeline and commands
 
 ### Safe from Git (large files)
 - `features/3d/` — generated .npy for training (.gitignore)
@@ -88,6 +86,32 @@
 - `models/llm/*.gguf` — LLM weights (.gitignore)
 - `dataset/mcfd/` — video files (.gitignore)
 - `results/debug_pose.png` — debug output (.gitignore)
+
+### Current Best 3D Model
+- Checkpoint: `checkpoints/enhanced_3d_20260712_185406/best_model.pth`
+- Archive copy: `checkpoints/archive/enhanced_3d_20260712_185406/`
+- Test split: 147 windows, fall ratio 0.3673
+- AUC-ROC: 0.9747
+- Recommended thresholds:
+  - `threshold_low = 0.30` → suspected / LLM review lower bound
+  - `threshold_high = 0.40` → direct fall threshold
+- At threshold 0.40: fall recall 1.000, fall precision 0.818, CM `[[81, 12], [0, 54]]`
+- At threshold 0.30: fall recall 1.000, fall precision 0.783, CM `[[78, 15], [0, 54]]`
+
+### Current Extraction/Training Notes
+- Default split preset in `extract_dataset_3d.py` is `balanced`:
+  - train `[1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,24]`
+  - val `[4,17,19,22]`
+  - test `[18,20,21,23]`
+- Training extraction should NOT use `--pose-fallback`; fallback is for demo/QA only.
+- Current recommended extraction command:
+  `python extract_dataset_3d.py --device cuda --yolo-batch 32 --time-batch 64 --min-quality 0.15 --max-normal 300`
+- Current recommended training command:
+  `python train_3d.py --seed 42 --no-smote`
+- Current threshold sweep command:
+  `python sweep_threshold.py --split test --device cuda`
+- Demo command:
+  `python demo_multiview.py --scenario 1`
 
 ---
 

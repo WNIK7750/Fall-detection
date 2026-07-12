@@ -56,6 +56,7 @@ class PoseDetector:
         min_valid_keypoints: int = 5,
         kp_conf_threshold: float = 0.3,
         yolo_conf_threshold: float = 0.05,
+        enable_fallback: bool = True,
         fallback_person_conf_threshold: float = 0.05,
         fallback_min_valid_keypoints: int = 5,
         fallback_kp_conf_threshold: float = 0.10,
@@ -72,6 +73,8 @@ class PoseDetector:
             kp_conf_threshold: Per-keypoint confidence threshold.
             yolo_conf_threshold: YOLO detection threshold. Kept low so fallback
                 can recover prone/small people that default YOLO filtering drops.
+            enable_fallback: If True, relaxed filters are used only when strict
+                filters find nobody. Disable this for training extraction.
             fallback_*: Relaxed filters used only if strict filters find nobody.
             infer_batch_size: YOLO internal batch size. MUST be > 1 for GPU utilization.
         """
@@ -81,6 +84,7 @@ class PoseDetector:
         self.min_valid_keypoints = min_valid_keypoints
         self.kp_conf_threshold = kp_conf_threshold
         self.yolo_conf_threshold = yolo_conf_threshold
+        self.enable_fallback = enable_fallback
         self.fallback_person_conf_threshold = fallback_person_conf_threshold
         self.fallback_min_valid_keypoints = fallback_min_valid_keypoints
         self.fallback_kp_conf_threshold = fallback_kp_conf_threshold
@@ -151,6 +155,8 @@ class PoseDetector:
         ]
         if valid_indices:
             return valid_indices, self.kp_conf_threshold
+        if not self.enable_fallback:
+            return [], self.kp_conf_threshold
 
         fallback_indices = [
             p for p in range(len(kps_all))

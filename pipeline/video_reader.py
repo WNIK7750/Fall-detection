@@ -42,7 +42,7 @@ class MCFDReader:
         end_frame: Optional[int] = None,
         offsets: Optional[dict[int, float]] = None,
         ref_cam: int = 1,
-        undistort: bool = True,
+        undistort: bool = False,
     ):
         """
         Args:

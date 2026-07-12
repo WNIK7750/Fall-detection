@@ -15,13 +15,20 @@ from pipeline.classifier import FallClassifier
 
 DEFAULT_CHECKPOINT = os.path.join(
     "checkpoints",
-    "enhanced_3d_20260712_153223",
+    "enhanced_3d_20260712_185406",
     "best_model.pth",
 )
 
 
-def parse_thresholds(raw: str) -> list[float]:
-    return [float(x.strip()) for x in raw.split(",") if x.strip()]
+def parse_thresholds(raw: str | None, start: float, stop: float, step: float) -> list[float]:
+    if raw:
+        return [float(x.strip()) for x in raw.split(",") if x.strip()]
+    values = []
+    t = start
+    while t <= stop + 1e-9:
+        values.append(round(t, 4))
+        t += step
+    return values
 
 
 def main():
@@ -32,8 +39,12 @@ def main():
     parser.add_argument("--device", default="cuda")
     parser.add_argument(
         "--thresholds",
-        default="0.50,0.60,0.70,0.75,0.80,0.85,0.88,0.90,0.92,0.95",
+        default=None,
+        help="Comma-separated thresholds. Overrides --start/--stop/--step.",
     )
+    parser.add_argument("--start", type=float, default=0.20)
+    parser.add_argument("--stop", type=float, default=0.95)
+    parser.add_argument("--step", type=float, default=0.05)
     args = parser.parse_args()
 
     split_dir = os.path.join(args.features_dir, args.split)
@@ -53,7 +64,7 @@ def main():
     auc = roc_auc_score(y, p) if len(set(y)) > 1 else float("nan")
     print(f"AUC={auc:.4f}\n")
 
-    for t in parse_thresholds(args.thresholds):
+    for t in parse_thresholds(args.thresholds, args.start, args.stop, args.step):
         pred = (p >= t).astype(int)
         prec, rec, f1, _ = precision_recall_fscore_support(
             y, pred, average=None, labels=[0, 1], zero_division=0
