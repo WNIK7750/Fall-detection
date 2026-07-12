@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from pipeline.video_reader import MCFDReader, load_annotations, find_fall_segments
 from pipeline.pose_inference import PoseDetector, MultiViewPoseVisualizer, MultiPersonTracker
 from pipeline.triangulation import Triangulator, KalmanSmoother
-from pipeline.features_3d import compute_features, extract_window
+from pipeline.features_3d import compute_features, extract_window, FloorEstimator
 from pipeline.classifier import FallClassifier, HeuristicClassifier
 from pipeline.llm_reviewer import LLMFallReviewer
 from pipeline.calibration import get_projections
@@ -218,6 +218,7 @@ def run_demo(args):
                     person_states[track_id] = {
                         'features': deque(maxlen=60),
                         'skeletons': deque(maxlen=60),
+                        'floor_estimator': FloorEstimator(),
                         'smoother': KalmanSmoother(),
                         'status': 'normal',
                     }
@@ -246,7 +247,7 @@ def run_demo(args):
 
                 # Features
                 prev_skel = pstate['skeletons'][-1] if pstate['skeletons'] else None
-                features = compute_features(skel, prev_skel)
+                features = compute_features(skel, prev_skel, floor_estimator=pstate['floor_estimator'])
                 if features is not None:
                     pstate['features'].append(features)
                 pstate['skeletons'].append(skel.copy())

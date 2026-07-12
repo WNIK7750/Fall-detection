@@ -70,24 +70,31 @@ class FloorEstimator:
         return self._floor_z is not None
 
 
-# Global floor estimator for feature extraction
-_floor_estimator = FloorEstimator()
 
 
 # ---------------------------------------------------------------------------
 # Per-frame feature computation
 # ---------------------------------------------------------------------------
 
-def compute_features(skeleton_3d: np.ndarray, prev_skeleton: np.ndarray | None = None) -> np.ndarray | None:
+def compute_features(
+    skeleton_3d: np.ndarray,
+    prev_skeleton: np.ndarray | None = None,
+    floor_estimator: FloorEstimator | None = None,
+) -> np.ndarray | None:
     """Compute 10-D feature vector from a single 3D skeleton.
 
     Args:
         skeleton_3d: (17, 3) world coordinates, may contain NaN for missing joints.
         prev_skeleton: (17, 3) previous frame for velocity/delta features.
+        floor_estimator: FloorEstimator instance. If None, a temporary one is
+            created (caller should pass a shared instance to avoid state pollution).
 
     Returns:
         (10,) feature vector, or None if too many joints missing.
     """
+    # Use caller-provided estimator, or create a temporary one
+    if floor_estimator is None:
+        floor_estimator = FloorEstimator()
     # Check if we have minimum required joints
     required = [L_SHOULDER, R_SHOULDER, L_HIP, R_HIP, NOSE]
     if any(np.isnan(skeleton_3d[j]).any() for j in required):
@@ -138,12 +145,12 @@ def compute_features(skeleton_3d: np.ndarray, prev_skeleton: np.ndarray | None =
     else:
         f3 = 0.0
 
-    # --- F4: 躯干倾角 (raw, delta computed in window extraction) ---
+    # --- F4: 躯干倾角变化率 (placeholder — delta computed in extract_window) ---
     f4 = f3
 
     # --- F5: 质心高度 (relative to estimated floor, normalized) ---
-    _floor_estimator.update(skeleton_3d)
-    floor_z = _floor_estimator.floor_z
+    floor_estimator.update(skeleton_3d)
+    floor_z = floor_estimator.floor_z
     f5 = (com[AXIS_H] - floor_z) / STANDING_HEIGHT
     f5 = np.clip(f5, -0.5, 3.0)
 
@@ -163,7 +170,7 @@ def compute_features(skeleton_3d: np.ndarray, prev_skeleton: np.ndarray | None =
             v = com - prev_com
             vz = abs(v[AXIS_H])
             vxy = np.sqrt(v[0]**2 + v[1]**2)
-            f7 = vz / (vxy + 1e-6)
+            f7 = vz / (vxy + 1e-3)
             f7 = np.clip(f7, 0.0, 10.0)
 
     # --- F8: 头脚距离 (nose to ankle midpoint euclidean) ---
@@ -218,9 +225,8 @@ def extract_window(
         X: (N, 10, window_size) — N windows, 10 features, window_size timesteps.
         frame_indices: Start frame index for each window.
     """
-    # Reset floor estimator for this sequence
-    global _floor_estimator
-    _floor_estimator = FloorEstimator()
+    # Create a fresh FloorEstimator per sequence (no global state)
+    floor_estimator = FloorEstimator()
 
     # Subsample
     skeletons = skeletons[::subsample]
@@ -229,12 +235,25 @@ def extract_window(
     features: list[np.ndarray] = []
     for i, skel in enumerate(skeletons):
         prev = skeletons[i - 1] if i > 0 else None
-        f = compute_features(skel, prev)
+        f = compute_features(skel, prev, floor_estimator=floor_estimator)
         if f is not None:
             features.append(f)
 
+    # F4: compute delta of torso angle (F3) — frame-to-frame change rate
+    # This was previously a dead placeholder (f4=f3); now contains real signal.
+    for i in range(len(features)):
+        if i > 0:
+            features[i][3] = features[i][2] - features[i - 1][2]
+        else:
+            features[i][3] = 0.0
+
     if len(features) < window_size:
         return np.empty((0, 10, window_size), dtype=np.float32), []
+
+    # Warn if floor never reached warmup (height features use default 0.0)
+    if not floor_estimator.ready:
+        print("WARNING: floor estimator never reached warmup "
+              f"({len(features)} frames) — height features use default floor_z=0.0")
 
     # Sliding window
     windows = []

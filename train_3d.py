@@ -62,7 +62,9 @@ def set_seed(seed: int = 42):
 # Training
 # ---------------------------------------------------------------------------
 def train(args):
-    set_seed(getattr(args, "seed", 42))
+    if args.seed is not None:
+        set_seed(args.seed)
+        print(f"Random seed fixed: {args.seed}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
@@ -133,9 +135,7 @@ def train(args):
 
     # Optimizer & loss
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=10, verbose=True
-    )
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
     criterion = FocalLoss(alpha=2.0, gamma=2.0)
 
     # Training loop — monitor val_loss (stable, not noisy like AUC on small val set)
@@ -160,19 +160,21 @@ def train(args):
                     loss = criterion(logits, yb)
                 scaler_amp.scale(loss).backward()
                 scaler_amp.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
                 scaler_amp.step(optimizer)
                 scaler_amp.update()
             else:
                 logits = model(xb)
                 loss = criterion(logits, yb)
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
                 optimizer.step()
 
             train_loss += loss.item()
 
         history["train_loss"].append(train_loss / len(train_loader))
+
+        scheduler.step()
 
         # Validate
         model.eval()
@@ -198,12 +200,9 @@ def train(args):
         history["val_auc"].append(auc)
 
         val_loss_epoch = history["val_loss"][-1]
-        lr_now = optimizer.param_groups[0]["lr"]
+        lr_now = scheduler.get_last_lr()[0]
         print(f"Epoch {epoch:3d}/{args.epochs} | loss={train_loss/len(train_loader):.4f} "
               f"val_loss={val_loss_epoch:.4f} | F1={f1:.3f} AUC={auc:.3f} | lr={lr_now:.2e}")
-
-        # Step scheduler after validation (ReduceLROnPlateau watches val_loss)
-        scheduler.step(val_loss_epoch)
 
         # Save best by val_loss (more stable than AUC/F1 on small val set)
         if val_loss_epoch < best_val_loss:
@@ -292,13 +291,13 @@ def train(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--dropout", type=float, default=0.3)
     parser.add_argument("--patience", type=int, default=20)
-    parser.add_argument("--seed", type=int, default=42,
-                        help="Random seed for reproducibility; vary to measure variance")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Random seed for reproducibility; omit for default randomness")
     parser.add_argument("--threshold", type=float, default=0.5,
                         help="Fall probability threshold for classification")
     parser.add_argument("--smote", action="store_true", default=True)
