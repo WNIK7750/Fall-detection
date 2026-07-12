@@ -16,6 +16,7 @@ Image size: 720×480 (original) → 640×640 (YOLO input after resize+pad)
 Intrinsics are provided for BOTH coordinate spaces.
 """
 
+import cv2
 import numpy as np
 
 # ---------------------------------------------------------------------------
@@ -140,6 +141,87 @@ DEFAULT_CAMERAS = [1, 4, 7]
 DEFAULT_PROJECTIONS = [build_projection_matrix(c) for c in DEFAULT_CAMERAS]
 
 PROJECTION_MATRICES = {c: build_projection_matrix(c) for c in range(1, 9)}
+
+
+# ---------------------------------------------------------------------------
+# Undistortion — precompute remap maps for each camera
+# ---------------------------------------------------------------------------
+# MCFD cameras have significant radial distortion (k1 ≈ -0.4).
+# Undistorting is essential for correct 3D triangulation because the
+# pinhole K matrix assumes rectilinear projection.
+#
+# Maps are computed at original 720×480 resolution, then applied before
+# resize+pad to YOLO 640×640 space.
+
+_UNDISTORT_MAP1: dict[int, np.ndarray] = {}
+_UNDISTORT_MAP2: dict[int, np.ndarray] = {}
+
+def _ensure_undistort_maps():
+    """Lazily compute undistort maps for all 8 cameras."""
+    if _UNDISTORT_MAP1:
+        return
+    for cam_id in range(1, 9):
+        K = build_K_matrix_original(cam_id)
+        dist = np.array(DISTORTION[cam_id], dtype=np.float64)
+        m1, m2 = cv2.initUndistortRectifyMap(
+            K, dist, None, K, (ORIG_W, ORIG_H), cv2.CV_16SC2,
+        )
+        _UNDISTORT_MAP1[cam_id] = m1
+        _UNDISTORT_MAP2[cam_id] = m2
+
+def get_undistort_maps(camera_ids: list[int]) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    """Return (map1_list, map2_list) for the given cameras.
+
+    Each map pair is suitable for cv2.remap(frame, m1, m2, cv2.INTER_LINEAR).
+    """
+    _ensure_undistort_maps()
+    return (
+        [_UNDISTORT_MAP1[cid] for cid in camera_ids],
+        [_UNDISTORT_MAP2[cid] for cid in camera_ids],
+    )
+
+def undistort_keypoints(
+    keypoints: np.ndarray,
+    cam_id: int,
+) -> np.ndarray:
+    """Undistort 2D keypoint coordinates (alternative to full-frame undistortion).
+
+    Use this when you want to keep frames distorted but correct keypoints
+    for triangulation. Converts from original 720×480 distorted space to
+    640×640 YOLO undistorted space.
+
+    Args:
+        keypoints: (17, 2) or (17, 3) — (x, y[, conf]) in YOLO 640×640 space.
+        cam_id: Camera ID (1-8).
+
+    Returns:
+        Undistorted keypoints in YOLO 640×640 space, same shape as input.
+    """
+    _ensure_undistort_maps()
+    K_orig = build_K_matrix_original(cam_id)
+    K_yolo = build_K_matrix_yolo(cam_id)
+    dist = np.array(DISTORTION[cam_id], dtype=np.float64)
+
+    # Map from YOLO space → original 720×480 space
+    inv_scale = 1.0 / SCALE
+    pts_orig = keypoints[:, :2].copy().astype(np.float64)
+    pts_orig[:, 0] = pts_orig[:, 0] * inv_scale
+    pts_orig[:, 1] = (pts_orig[:, 1] - PAD_TOP) * inv_scale
+
+    # Undistort at original resolution
+    pts_undist = cv2.undistortPoints(
+        pts_orig.reshape(-1, 1, 2),
+        K_orig,
+        dist,
+        P=K_yolo,  # map directly to YOLO pixel coords
+    ).reshape(-1, 2)
+
+    # Reconstruct output array
+    if keypoints.shape[1] == 3:
+        result = np.column_stack([pts_undist, keypoints[:, 2]])
+    else:
+        result = pts_undist
+    return result.astype(np.float32)
 
 
 # ---------------------------------------------------------------------------

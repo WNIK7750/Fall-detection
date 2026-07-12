@@ -24,6 +24,10 @@ class MCFDReader:
 
     Supports per-camera frame offsets for approximate time synchronization.
     Offsets are estimated from data_tuple3.csv fall segment annotations.
+
+    Optional lens undistortion using precomputed cv2 remap maps. MCFD cameras
+    have significant radial distortion (k1 ≈ -0.4), and undistorting is
+    essential for correct 3D triangulation.
     """
 
     def __init__(
@@ -36,6 +40,7 @@ class MCFDReader:
         end_frame: Optional[int] = None,
         offsets: Optional[dict[int, float]] = None,
         ref_cam: int = 1,
+        undistort: bool = True,
     ):
         """
         Args:
@@ -49,11 +54,26 @@ class MCFDReader:
                      e.g. {5: 20} means cam5 frame 1120 ≈ cam1 frame 1100.
                      If None, auto-compute from annotations.
             ref_cam: Reference camera ID for offsets (default cam1).
+            undistort: If True, apply lens undistortion before resize+pad.
+                       Requires calibration data. Recommended for 3D triangulation.
         """
         self.scenario = scenario
         self.camera_ids = camera_ids
         self.target_size = target_size
         self.num_views = len(camera_ids)
+        self._undistort = undistort
+        self._undistort_maps: Optional[tuple[list, list]] = None
+
+        # Initialize undistort maps if requested
+        if undistort:
+            from pipeline.calibration import get_undistort_maps
+            try:
+                m1_list, m2_list = get_undistort_maps(camera_ids)
+                self._undistort_maps = (m1_list, m2_list)
+                print(f"[UNDISTORT] Lens correction enabled for cameras {camera_ids}")
+            except Exception as e:
+                print(f"[UNDISTORT] WARNING: Failed to init undistort maps: {e}")
+                self._undistort = False
 
         # Compute or use offsets
         if offsets is None:
@@ -145,11 +165,19 @@ class MCFDReader:
         while self.current_frame < self.end_frame:
             frames: list[np.ndarray] = []
             all_ok = True
-            for cap in self.caps:
+            for i, cap in enumerate(self.caps):
                 ok, frame = cap.read()
                 if not ok:
                     all_ok = False
                     break
+                # Undistort before resize (corrects lens distortion for 3D)
+                if self._undistort and self._undistort_maps is not None:
+                    frame = cv2.remap(
+                        frame,
+                        self._undistort_maps[0][i],
+                        self._undistort_maps[1][i],
+                        cv2.INTER_LINEAR,
+                    )
                 frame = self._resize_pad(frame)
                 frames.append(frame)
 

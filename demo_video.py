@@ -54,6 +54,11 @@ except ImportError:
     YOLO_AVAILABLE = False
     print("警告: ultralytics 未安装，将使用模拟姿态数据")
 
+# Person detection quality thresholds (filters chairs/objects)
+PERSON_CONF_THRESHOLD = 0.5   # Minimum YOLO person detection confidence
+MIN_VALID_KEYPOINTS = 5        # Minimum high-confidence keypoints per person
+KP_CONF_THRESHOLD = 0.3       # Per-keypoint confidence threshold
+
 
 # ============ COCO 关键点定义 ============
 COCO_KEYPOINTS = [
@@ -468,9 +473,46 @@ def play_video(cap, video_path, model_a, model_b, pose_model,
             if pose_model is not None:
                 results = pose_model(frame, verbose=False)
                 result = results[0]
-                
+
                 if result.keypoints is not None and len(result.keypoints) > 0:
-                    kpts = result.keypoints[0].data.cpu().numpy()[0]
+                    kps_all = result.keypoints.data.cpu().numpy()  # (P, 17, 3)
+                    img_h, img_w = frame.shape[:2]
+
+                    # Filter valid persons (exclude chairs/objects)
+                    valid_kps = []
+                    for p in range(len(kps_all)):
+                        kp = kps_all[p]  # (17, 3)
+                        # Check 1: YOLO detection confidence
+                        if hasattr(result, 'boxes') and result.boxes is not None:
+                            try:
+                                box_conf = float(result.boxes.conf[p].cpu().numpy())
+                            except (IndexError, AttributeError):
+                                box_conf = 0.0
+                            if box_conf < PERSON_CONF_THRESHOLD:
+                                continue
+                        # Check 2: minimum valid keypoints
+                        n_valid = int((kp[:, 2] > KP_CONF_THRESHOLD).sum())
+                        if n_valid < MIN_VALID_KEYPOINTS:
+                            continue
+                        valid_kps.append(kp)
+
+                    if valid_kps:
+                        if len(valid_kps) == 1:
+                            kpts = valid_kps[0]
+                        else:
+                            # Pick person closest to image center
+                            best_idx = 0
+                            best_dist = float('inf')
+                            for i, kp in enumerate(valid_kps):
+                                valid_mask = kp[:, 2] > KP_CONF_THRESHOLD
+                                if valid_mask.any():
+                                    cx = kp[valid_mask, 0].mean()
+                                    cy = kp[valid_mask, 1].mean()
+                                    dist = ((cx - img_w/2)**2 + (cy - img_h/2)**2)**0.5
+                                    if dist < best_dist:
+                                        best_dist = dist
+                                        best_idx = i
+                            kpts = valid_kps[best_idx]
             
             # ============ 特征提取 ============
             current_feature = None

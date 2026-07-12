@@ -31,7 +31,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(__file__))
 
 from pipeline.video_reader import MCFDReader, load_annotations, find_fall_segments
-from pipeline.pose_inference import PoseDetector, MultiViewPoseVisualizer
+from pipeline.pose_inference import PoseDetector, MultiViewPoseVisualizer, MultiPersonTracker
 from pipeline.triangulation import Triangulator, KalmanSmoother
 from pipeline.features_3d import compute_features, extract_window
 from pipeline.classifier import FallClassifier, HeuristicClassifier
@@ -116,6 +116,9 @@ def run_demo(args):
     tri = Triangulator(projections)
     smoother = KalmanSmoother()
 
+    # Multi-person tracker — maintains consistent IDs across frames
+    tracker = MultiPersonTracker(num_views=len(camera_ids))
+
     # Classifier — ML model or heuristic fallback
     classifier = None
     if args.checkpoint:
@@ -154,9 +157,11 @@ def run_demo(args):
     fall_segments = find_fall_segments(annotations, scenario)
     print(f"Fall segments: {fall_segments}")
 
-    # Feature history (20-frame window)
-    feature_history: deque = deque(maxlen=60)  # enough for 20 frames at subsample=3
-    skeleton_history: deque = deque(maxlen=60)
+    tracker.reset()  # fresh track IDs for each scenario
+
+    # Per-track person state: track_id -> {features:deque, skeletons:deque, smoother, status}
+    # (track_id is per-view; we use view0's track IDs as the reference for display)
+    person_states: dict[int, dict] = {}
     frame_buffer: list = []  # for LLM review context
 
     current_status = "normal"
@@ -179,38 +184,86 @@ def run_demo(args):
             t_start = time.time()
 
             # 1. YOLO pose detection — ALL persons per view
-            people_per_view = detector.infer_batch_all(frames)
-            num_people = max(max(len(v) for v in people_per_view), 1)
+            raw_persons = detector.infer_batch_all(frames)
 
-            # Process each person
-            all_statuses = []
-            for pid in range(num_people):
-                person_kps = [people_per_view[v][pid] if pid < len(people_per_view[v])
-                              else np.zeros((17, 3), dtype=np.float32) for v in range(3)]
+            # 2. Multi-person tracking — stable IDs across frames
+            tracked = tracker.update(raw_persons)
+            # tracked[v] = [(track_id, keypoints), ...] sorted by track_id
 
-                # 2. Triangulation
+            # Use view0's track IDs as the global person index for display
+            view0_tracks = tracked[0] if len(tracked) > 0 else []
+            num_people = len(view0_tracks)
+
+            if num_people == 0:
+                # No one detected — show empty frame
+                combined = np.hstack(frames)
+                cv2.rectangle(combined, (0, combined.shape[0] - 30),
+                              (combined.shape[1], combined.shape[0]), (10, 10, 10), -1)
+                cv2.putText(combined, "FPS: -- | [q]uit [space]pause",
+                            (10, combined.shape[0] - 8),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, WHITE, 1)
+                cv2.imshow("Fall Detection Demo", combined)
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord("q") or key == 27: break
+                elif key == ord(" "): paused = True
+                continue
+
+            # 3. Process each tracked person independently
+            all_statuses: list[str] = []
+            main_skel = None
+
+            for pidx, (track_id, kp_view0) in enumerate(view0_tracks):
+                # Ensure per-track state exists
+                if track_id not in person_states:
+                    person_states[track_id] = {
+                        'features': deque(maxlen=60),
+                        'skeletons': deque(maxlen=60),
+                        'smoother': KalmanSmoother(),
+                        'status': 'normal',
+                    }
+                pstate = person_states[track_id]
+
+                # Collect keypoints across all views for this person
+                # Map track_id in each view to the corresponding detection
+                person_kps = []
+                for v in range(len(tracked)):
+                    # Find the detection with matching track_id, or use the same index
+                    # if tracking is consistent across views (common for single person)
+                    v_tracks = tracked[v]
+                    if v == 0:
+                        person_kps.append(kp_view0)
+                    elif pidx < len(v_tracks):
+                        person_kps.append(v_tracks[pidx][1])
+                    else:
+                        person_kps.append(np.zeros((17, 3), dtype=np.float32))
+
+                # Triangulation
                 skel = tri.triangulate(person_kps)
-                skel = smoother.update(skel)
+                skel = pstate['smoother'].update(skel)
 
-                # 3. Features
-                features = compute_features(skel, skeleton_history[-1] if skeleton_history else None)
+                if pidx == 0:
+                    main_skel = skel.copy()
+
+                # Features
+                prev_skel = pstate['skeletons'][-1] if pstate['skeletons'] else None
+                features = compute_features(skel, prev_skel)
                 if features is not None:
-                    feature_history.append(features)
-                skeleton_history.append(skel.copy())
+                    pstate['features'].append(features)
+                pstate['skeletons'].append(skel.copy())
 
-                # 4. Classification (every stride=5 frames)
-                cls_result = None
+                # Classification (every stride=5 frames)
                 status = "normal"
-                if classifier and len(feature_history) >= 20 and frame_idx % 5 == 0:
-                    window = np.array(list(feature_history)[-20:])
+                if classifier and len(pstate['features']) >= 20 and frame_idx % 5 == 0:
+                    window = np.array(list(pstate['features'])[-20:])
                     cls_result = classifier.predict(window)
                     status = cls_result["class_name"]
+                pstate['status'] = status
                 all_statuses.append(status)
 
-                if pid == 0:
+                if pidx == 0:
                     current_status = status
 
-            # 5. LLM Review (on "suspected" for main person)
+            # 4. LLM Review (on "suspected" for main person)
             if current_status == "suspected" and reviewer and reviewer.ready:
                 if len(frame_buffer) >= 3:
                     llm_result = reviewer.review(frame_buffer[-3:])
@@ -224,26 +277,36 @@ def run_demo(args):
             if len(frame_buffer) > 10:
                 frame_buffer.pop(0)
 
-            # 6. Visualization — draw ALL persons
+            # 5. Visualization — draw ALL persons per view
             vis_frames = []
+            colors = [GREEN, (255, 255, 0), (0, 255, 255), (255, 0, 255)]
             for v, frame in enumerate(frames):
                 vis = frame.copy()
-                # Draw each person with different color
-                colors = [GREEN, (255, 255, 0), (0, 255, 255), (255, 0, 255)]
-                for pid in range(num_people):
-                    if pid < len(people_per_view[v]):
-                        kp = people_per_view[v][pid]
-                        vis = MultiViewPoseVisualizer.draw_keypoints(vis, kp)
+                v_tracks = tracked[v] if v < len(tracked) else []
 
-                status_text = f"Cam{camera_ids[v]} | F{frame_idx} | {current_status.upper()} | {num_people}p"
+                for pidx, (track_id, kp) in enumerate(v_tracks):
+                    color = colors[pidx % len(colors)]
+                    vis = MultiViewPoseVisualizer.draw_keypoints(vis, kp, color=color)
+                    # Draw track ID label near the person
+                    valid = kp[:, 2] > 0.3
+                    if valid.any():
+                        cx, cy = int(kp[valid, 0].mean()), int(kp[valid, 1].min()) - 10
+                        cv2.putText(vis, f"T{track_id}", (cx - 15, cy),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
+
+                # Build multi-person status text
+                status_parts = []
+                for pidx, (track_id, _) in enumerate(view0_tracks):
+                    s = all_statuses[pidx] if pidx < len(all_statuses) else "?"
+                    status_parts.append(f"T{track_id}:{s}")
+                status_text = f"Cam{camera_ids[v]} | F{frame_idx} | {current_status.upper()} | {' '.join(status_parts)}"
                 vis = draw_status_bar(vis, status_text,
                     {"normal": GREEN, "suspected": YELLOW, "fall": RED}.get(current_status, WHITE))
                 vis_frames.append(vis)
 
-            # 3D mini-view for main person (pid=0)
-            main_kps = [people_per_view[v][0] if len(people_per_view[v]) > 0
-                        else np.zeros((17,3), dtype=np.float32) for v in range(3)]
-            main_skel = tri.triangulate(main_kps)
+            # 3D mini-view using main person's skeleton (already computed, no flicker)
+            if main_skel is None:
+                main_skel = np.full((17, 3), np.nan, dtype=np.float64)
             skel_vis = draw_3d_skeleton(np.zeros((200, 200, 3), dtype=np.uint8), main_skel)
             skel_vis = cv2.resize(skel_vis, (vis_frames[0].shape[1], vis_frames[0].shape[0]))
             vis_frames.append(skel_vis)

@@ -13,6 +13,7 @@ import os
 import sys
 import json
 import argparse
+import random
 from datetime import datetime
 
 import numpy as np
@@ -46,9 +47,23 @@ class FocalLoss(nn.Module):
 
 
 # ---------------------------------------------------------------------------
+# Reproducibility
+# ---------------------------------------------------------------------------
+def set_seed(seed: int = 42):
+    """Fix random seeds for reproducible training."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+# ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
 def train(args):
+    set_seed(getattr(args, "seed", 42))
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
     print(f"Config: {vars(args)}")
@@ -63,6 +78,13 @@ def train(args):
     N, F, T = X_train.shape
     print(f"\nData: train={N} val={len(y_val)}, shape=({F},{T}), "
           f"fall_ratio={y_train.mean():.1%}")
+    print(f"  Train class dist: 0={int((y_train==0).sum())}  1={int((y_train==1).sum())}")
+    print(f"  Val   class dist: 0={int((y_val==0).sum())}  1={int((y_val==1).sum())}")
+
+    if y_train.mean() < 0.01:
+        print("  WARNING: train set has <1% fall samples — model will struggle to learn!")
+    if y_val.mean() < 0.01:
+        print("  WARNING: val set has <1% fall samples — cannot evaluate properly!")
 
     # Standardize (fit on train, apply to val)
     X_train_2d = X_train.transpose(0, 2, 1).reshape(-1, F)  # (N*T, F)
@@ -111,14 +133,18 @@ def train(args):
 
     # Optimizer & loss
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=10, verbose=True
+    )
     criterion = FocalLoss(alpha=2.0, gamma=2.0)
 
-    # Training loop
-    best_val_f1 = 0.0
+    # Training loop — monitor val_loss (stable, not noisy like AUC on small val set)
+    best_val_loss = float("inf")
     history = {"train_loss": [], "val_loss": [], "val_f1": [], "val_auc": []}
     patience_counter = 0
     run_name = datetime.now().strftime("enhanced_3d_%Y%m%d_%H%M%S")
+    ckpt_dir = os.path.join("checkpoints", run_name)  # always set, even if no improvement
+    os.makedirs(ckpt_dir, exist_ok=True)
 
     for epoch in range(1, args.epochs + 1):
         # Train
@@ -133,17 +159,19 @@ def train(args):
                     logits = model(xb)
                     loss = criterion(logits, yb)
                 scaler_amp.scale(loss).backward()
+                scaler_amp.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 scaler_amp.step(optimizer)
                 scaler_amp.update()
             else:
                 logits = model(xb)
                 loss = criterion(logits, yb)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
             train_loss += loss.item()
 
-        scheduler.step()
         history["train_loss"].append(train_loss / len(train_loader))
 
         # Validate
@@ -162,29 +190,34 @@ def train(args):
         history["val_loss"].append(val_loss / len(val_loader))
         probs = np.concatenate(all_probs)
         labels = np.concatenate(all_labels)
-        preds = probs.argmax(axis=1)
+        # Use probability threshold (not argmax) — same as inference
+        preds = (probs[:, 1] >= args.threshold).astype(int)
         f1 = classification_report(labels, preds, output_dict=True, zero_division=0)["1"]["f1-score"]
         auc = roc_auc_score(labels, probs[:, 1]) if len(set(labels)) > 1 else 0.5
         history["val_f1"].append(f1)
         history["val_auc"].append(auc)
 
-        lr_now = scheduler.get_last_lr()[0]
+        val_loss_epoch = history["val_loss"][-1]
+        lr_now = optimizer.param_groups[0]["lr"]
         print(f"Epoch {epoch:3d}/{args.epochs} | loss={train_loss/len(train_loader):.4f} "
-              f"val_loss={history['val_loss'][-1]:.4f} | F1={f1:.3f} AUC={auc:.3f} | lr={lr_now:.2e}")
+              f"val_loss={val_loss_epoch:.4f} | F1={f1:.3f} AUC={auc:.3f} | lr={lr_now:.2e}")
 
-        # Save best
-        if f1 > best_val_f1:
-            best_val_f1 = f1
+        # Step scheduler after validation (ReduceLROnPlateau watches val_loss)
+        scheduler.step(val_loss_epoch)
+
+        # Save best by val_loss (more stable than AUC/F1 on small val set)
+        if val_loss_epoch < best_val_loss:
+            best_val_loss = val_loss_epoch
             patience_counter = 0
-            ckpt_dir = os.path.join("checkpoints", run_name)
-            os.makedirs(ckpt_dir, exist_ok=True)
             torch.save({
                 "model_state_dict": model.state_dict(),
                 "scaler_mean": scaler.mean_,
                 "scaler_scale": scaler.scale_,
                 "input_size": F,
                 "epoch": epoch,
+                "val_loss": val_loss_epoch,
                 "f1": f1,
+                "auc": auc,
             }, os.path.join(ckpt_dir, "best_model.pth"))
         else:
             patience_counter += 1
@@ -192,36 +225,69 @@ def train(args):
                 print(f"Early stopping at epoch {epoch}")
                 break
 
-    # Save history
+    # Save history (always, even if model never improved)
     with open(os.path.join(ckpt_dir, "history.json"), "w") as f:
         json.dump(history, f, indent=2)
 
-    # Test set evaluation (optional — skip if no test data)
+    # Save last checkpoint if no best was saved (model never improved)
+    best_path = os.path.join(ckpt_dir, "best_model.pth")
+    if not os.path.exists(best_path):
+        print("No improvement during training — saving last state")
+        torch.save({
+            "model_state_dict": model.state_dict(),
+            "scaler_mean": scaler.mean_,
+            "scaler_scale": scaler.scale_,
+            "input_size": F,
+            "epoch": epoch,
+            "val_loss": val_loss_epoch,
+            "f1": f1,
+            "auc": auc,
+        }, best_path)
+
+    # Test set evaluation
     test_path = os.path.join(feats_dir, "test", "X.npy")
     if os.path.exists(test_path) and os.path.getsize(test_path) > 128:
         X_test = np.load(test_path)
         y_test = np.load(os.path.join(feats_dir, "test", "y.npy"))
+        print(f"\n=== Test Set ({run_name}) ===")
+        print(f"  Samples: {len(y_test)}, fall ratio: {y_test.mean():.1%}")
+
         if len(y_test) == 0:
-            print("\n(Test set empty, skipping evaluation)")
-            return
-        X_test_2d = X_test.transpose(0, 2, 1).reshape(-1, F)
-        X_test_scaled = scaler.transform(X_test_2d).reshape(len(y_test), T, F)
+            print("  (Test set empty, skipping evaluation)")
+        elif len(set(y_test)) < 2:
+            print(f"  WARNING: test set has only 1 class ({int(y_test[0])}). "
+                  f"Cannot compute AUC/F1 meaningfully.")
+            # Still run inference for completeness
+            X_test_2d = X_test.transpose(0, 2, 1).reshape(-1, F)
+            X_test_scaled = scaler.transform(X_test_2d).reshape(len(y_test), T, F)
+            model.eval()
+            with torch.no_grad():
+                x_t = torch.tensor(X_test_scaled, dtype=torch.float32).to(device)
+                logits = model(x_t)
+                t_probs = torch.softmax(logits, dim=1).cpu().numpy()
+            t_preds = (t_probs[:, 1] >= args.threshold).astype(int)
+            acc = (t_preds == y_test).mean()
+            print(f"  Accuracy: {acc:.3f}  (all samples are class {int(y_test[0])})")
+        else:
+            X_test_2d = X_test.transpose(0, 2, 1).reshape(-1, F)
+            X_test_scaled = scaler.transform(X_test_2d).reshape(len(y_test), T, F)
+            model.eval()
+            with torch.no_grad():
+                x_t = torch.tensor(X_test_scaled, dtype=torch.float32).to(device)
+                logits = model(x_t)
+                t_probs = torch.softmax(logits, dim=1).cpu().numpy()
+            t_preds = (t_probs[:, 1] >= args.threshold).astype(int)
 
-        model.eval()
-        with torch.no_grad():
-            x_t = torch.tensor(X_test_scaled, dtype=torch.float32).to(device)
-            logits = model(x_t)
-            t_probs = torch.softmax(logits, dim=1).cpu().numpy()
-        t_preds = t_probs.argmax(axis=1)
+            present_labels = sorted(set(int(y) for y in y_test) | set(int(p) for p in t_preds))
+            label_names = ["normal", "fall"]
+            used_names = [label_names[i] for i in present_labels if i < len(label_names)]
+            print(classification_report(y_test, t_preds, labels=present_labels,
+                                        target_names=used_names, zero_division=0))
+            print(f"AUC-ROC: {roc_auc_score(y_test, t_probs[:,1]):.4f}")
+            cm = confusion_matrix(y_test, t_preds)
+            print(f"Confusion Matrix:\n{cm}")
 
-        print(f"\n=== Test Set Results ({run_name}) ===")
-        print(classification_report(y_test, t_preds, target_names=["normal", "fall"], zero_division=0))
-        print(f"AUC-ROC: {roc_auc_score(y_test, t_probs[:,1]):.4f}")
-        cm = confusion_matrix(y_test, t_preds)
-        print(f"Confusion Matrix:\n{cm}")
-
-    print(f"\nBest model saved: {ckpt_dir}/best_model.pth")
-    print(f"Next: use FallClassifier(checkpoint_path='{ckpt_dir}/best_model.pth') for inference.")
+    print(f"\nCheckpoint saved: {ckpt_dir}/best_model.pth")
 
 
 if __name__ == "__main__":
@@ -231,6 +297,10 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--dropout", type=float, default=0.3)
     parser.add_argument("--patience", type=int, default=20)
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for reproducibility; vary to measure variance")
+    parser.add_argument("--threshold", type=float, default=0.5,
+                        help="Fall probability threshold for classification")
     parser.add_argument("--smote", action="store_true", default=True)
     parser.add_argument("--no-smote", action="store_false", dest="smote")
     args = parser.parse_args()
