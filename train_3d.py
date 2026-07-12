@@ -43,7 +43,7 @@ class FocalLoss(nn.Module):
         ce = nn.CrossEntropyLoss(reduction="none")(logits, targets)
         pt = torch.exp(-ce)
         focal_weight = self.alpha * (1 - pt) ** self.gamma
-        return focal_weight.mean()
+        return (focal_weight * ce).mean()
 
 
 # ---------------------------------------------------------------------------

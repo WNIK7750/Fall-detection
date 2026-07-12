@@ -14,6 +14,7 @@ Usage:
 import os
 import sys
 import argparse
+import time
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -29,6 +30,22 @@ NORM_SUBSAMPLE = 3     # sparser for normal segments
 NORM_STRIDE = 5
 WINDOW_SIZE = 20
 FALL_CONTEXT = 200     # frames before/after fall segment to include
+TIME_BATCH_SIZE = 64   # timesteps per YOLO call before flattening views
+
+
+def merge_frame_ranges(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Merge overlapping or touching [start, end) frame ranges."""
+    if not ranges:
+        return []
+    ordered = sorted((max(0, int(s)), max(0, int(e))) for s, e in ranges if e > s)
+    merged = [ordered[0]]
+    for start, end in ordered[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+    return merged
 
 
 def label_windows(
@@ -36,7 +53,6 @@ def label_windows(
     frame_starts: list[int],
     fall_segments: list[tuple[int, int]],
     subsample: int = FALL_SUBSAMPLE,
-    offset: int = 0,
 ) -> np.ndarray:
     """Label windows: 1 if any overlap with a fall segment."""
     y = np.zeros(len(X), dtype=np.int64)
@@ -44,7 +60,7 @@ def label_windows(
     for i, start in enumerate(frame_starts):
         end = start + win_span
         for fs_start, fs_end in fall_segments:
-            if not (end < fs_start or (start - offset) > fs_end):
+            if not (end < fs_start or start > fs_end):
                 y[i] = 1
                 break
     return y
@@ -52,18 +68,22 @@ def label_windows(
 
 def extract_and_window(
     data_root, scenario, camera_ids, detector, tri,
-    frame_ranges, fall_segs, subsample, stride, offset=0,
+    frame_ranges, fall_segs, subsample, stride,
+    time_batch_size: int = TIME_BATCH_SIZE,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Extract skeletons and build windows for given frame ranges."""
-    smoother = KalmanSmoother()
-    all_skeletons = []
+    X_parts = []
+    y_parts = []
 
-    for start, end in frame_ranges:
+    for start, end in merge_frame_ranges(frame_ranges):
+        smoother = KalmanSmoother()
+        range_skeletons = []
         with MCFDReader(data_root, scenario, camera_ids,
                         start_frame=start, end_frame=end) as reader:
             # Time-batched YOLO inference: collect N timesteps, run one GPU call
             time_batch: list[list[np.ndarray]] = []  # [[cam1,cam2,cam3], ...]
-            batch_size = 64  # 64 timesteps × 3 views = 192 images per YOLO call
+            batch_size = time_batch_size
+            absolute_start = reader.ref_start_frame
 
             for frames in reader:
                 time_batch.append(frames)
@@ -80,7 +100,7 @@ def extract_and_window(
                     kps = [flat_kps[t * num_views + v] for v in range(num_views)]
                     skel = tri.triangulate(kps)
                     skel = smoother.update(skel)
-                    all_skeletons.append(skel)
+                    range_skeletons.append(skel)
                 time_batch = []
 
             # Process remaining frames
@@ -92,24 +112,41 @@ def extract_and_window(
                     kps = [flat_kps[t * num_views + v] for v in range(num_views)]
                     skel = tri.triangulate(kps)
                     skel = smoother.update(skel)
-                    all_skeletons.append(skel)
+                    range_skeletons.append(skel)
 
-    if not all_skeletons:
-        return np.empty((0, WINDOW_SIZE, 10)), np.empty((0,))
+        if not range_skeletons:
+            continue
 
-    X, indices = extract_window(all_skeletons, window_size=WINDOW_SIZE,
-                                stride=stride, subsample=subsample)
-    if len(X) == 0:
+        X, indices = extract_window(range_skeletons, window_size=WINDOW_SIZE,
+                                    stride=stride, subsample=subsample)
+        if len(X) == 0:
+            continue
+
+        abs_indices = [absolute_start + idx for idx in indices]
+        y = label_windows(X, abs_indices, fall_segs, subsample)
+        X_parts.append(X)
+        y_parts.append(y)
+
+    if not X_parts:
         return np.empty((0, 10, WINDOW_SIZE)), np.empty((0,))
 
-    y = label_windows(X, indices, fall_segs, subsample, offset)
-    return X, y
+    return np.concatenate(X_parts), np.concatenate(y_parts)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--fast", action="store_true",
                         help="Fall segments only (skip normal windows)")
+    parser.add_argument("--device", default=None,
+                        help="YOLO device, e.g. cuda, cpu, 0. Default: auto")
+    parser.add_argument("--yolo-batch", type=int, default=32,
+                        help="Ultralytics internal image batch size")
+    parser.add_argument("--time-batch", type=int, default=TIME_BATCH_SIZE,
+                        help="Timesteps collected before each YOLO call")
+    parser.add_argument("--max-normal", type=int, default=120,
+                        help="Maximum normal windows kept per scenario")
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="Skip a split if X.npy and y.npy already exist")
     args = parser.parse_args()
 
     data_root = os.path.join(os.path.dirname(__file__), "dataset", "mcfd")
@@ -119,15 +156,23 @@ def main():
     annotations = load_annotations(data_root)
 
     print("Initializing YOLO + Triangulation...")
-    detector = PoseDetector()
+    detector = PoseDetector(device=args.device, infer_batch_size=args.yolo_batch)
     from pipeline.calibration import DEFAULT_PROJECTIONS
     tri = Triangulator(DEFAULT_PROJECTIONS)
 
     for split_name, scenario_range in splits.items():
+        out_dir = os.path.join("features", "3d", split_name)
+        x_path = os.path.join(out_dir, "X.npy")
+        y_path = os.path.join(out_dir, "y.npy")
+        if args.skip_existing and os.path.exists(x_path) and os.path.exists(y_path):
+            print(f"  [{split_name}] existing files found, skipping")
+            continue
+
+        split_t0 = time.perf_counter()
         X_all, y_all = [], []
 
         for s in scenario_range:
-            fall_segs = find_fall_segments(annotations, s)
+            fall_segs = find_fall_segments(annotations, s, cam_id=camera_ids[0])
             print(f"  [{split_name}] Scenario {s:2d}: {len(fall_segs)} fall segs "
                   f"@ {[f'{a}-{b}' for a,b in fall_segs[:3]]}...", end=" ", flush=True)
 
@@ -148,6 +193,7 @@ def main():
                     data_root, s, camera_ids, detector, tri,
                     fall_ranges, fall_segs,
                     subsample=FALL_SUBSAMPLE, stride=FALL_STRIDE,
+                    time_batch_size=args.time_batch,
                 )
                 # Only keep fall-labeled windows — context frames are NOT normal
                 if len(Xf) > 0:
@@ -176,9 +222,10 @@ def main():
                         data_root, s, camera_ids, detector, tri,
                         norm_ranges, fall_segs,
                         subsample=NORM_SUBSAMPLE, stride=NORM_STRIDE,
+                        time_batch_size=args.time_batch,
                     )
                     # Cap normal windows per scenario to keep balance reasonable
-                    max_norm = 120
+                    max_norm = args.max_normal
                     if len(Xn) > max_norm:
                         keep = np.random.RandomState(42 + s).choice(
                             len(Xn), max_norm, replace=False)
@@ -193,6 +240,7 @@ def main():
                     data_root, s, camera_ids, detector, tri,
                     [(0, 600)], fall_segs=None or [],
                     subsample=NORM_SUBSAMPLE, stride=NORM_STRIDE,
+                    time_batch_size=args.time_batch,
                 )
                 if len(Xn) > 0:
                     X_scenario.append(Xn)
@@ -221,12 +269,14 @@ def main():
             X_out = np.empty((0, 10, WINDOW_SIZE))
             y_out = np.empty((0,))
 
-        out_dir = os.path.join("features", "3d", split_name)
         os.makedirs(out_dir, exist_ok=True)
-        np.save(os.path.join(out_dir, "X.npy"), X_out)
-        np.save(os.path.join(out_dir, "y.npy"), y_out)
+        np.save(x_path, X_out)
+        np.save(y_path, y_out)
         pos = int(y_out.sum()) if len(y_out) > 0 else 0
-        print(f"  Saved {len(X_out)} windows ({pos} falls, {y_out.mean():.1%}) → {out_dir}/")
+        elapsed = time.perf_counter() - split_t0
+        ratio = f"{y_out.mean():.1%}" if len(y_out) > 0 else "n/a"
+        print(f"  Saved {len(X_out)} windows ({pos} falls, {ratio}) → {out_dir}/ "
+              f"in {elapsed/60:.1f} min")
 
     print("\nDone. Next: python train_3d.py")
 

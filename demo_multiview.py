@@ -38,6 +38,14 @@ from pipeline.classifier import FallClassifier, HeuristicClassifier
 from pipeline.llm_reviewer import LLMFallReviewer
 from pipeline.calibration import get_projections
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_3D_CHECKPOINT = os.path.join(
+    BASE_DIR,
+    "checkpoints",
+    "enhanced_3d_20260712_153223",
+    "best_model.pth",
+)
+
 
 # --- Color constants ---
 GREEN  = (0, 255, 0)
@@ -129,8 +137,8 @@ def run_demo(args):
                 threshold_low=args.threshold_low,
                 threshold_high=args.threshold_high,
             )
-            print(f"  Params: {clf.num_params:,}")
-        except (FileNotFoundError, RuntimeError) as e:
+            print(f"  Params: {classifier.num_params:,}")
+        except (FileNotFoundError, RuntimeError, TypeError, ValueError) as e:
             print(f"  WARNING: {e}")
     if classifier is None:
         print("Using heuristic classifier (rule-based fallback)")
@@ -249,11 +257,15 @@ def run_demo(args):
                 prev_skel = pstate['skeletons'][-1] if pstate['skeletons'] else None
                 features = compute_features(skel, prev_skel, floor_estimator=pstate['floor_estimator'])
                 if features is not None:
+                    if pstate['features']:
+                        features[3] = features[2] - pstate['features'][-1][2]
+                    else:
+                        features[3] = 0.0
                     pstate['features'].append(features)
                 pstate['skeletons'].append(skel.copy())
 
                 # Classification (every stride=5 frames)
-                status = "normal"
+                status = pstate.get('status', 'normal')
                 if classifier and len(pstate['features']) >= 20 and frame_idx % 5 == 0:
                     window = np.array(list(pstate['features'])[-20:])
                     cls_result = classifier.predict(window)
@@ -350,7 +362,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Multi-view Fall Detection Demo")
     parser.add_argument("--scenario", type=int, default=1, help="MCFD scenario (1-24)")
     parser.add_argument("--cameras", type=int, nargs="+", default=[1, 4, 7], help="Camera IDs")
-    parser.add_argument("--checkpoint", type=str, default=None, help="Classifier checkpoint path")
+    parser.add_argument("--checkpoint", type=str, default=DEFAULT_3D_CHECKPOINT,
+                        help="Classifier checkpoint path")
     parser.add_argument("--threshold-low", type=float, default=0.4)
     parser.add_argument("--threshold-high", type=float, default=0.85)
     parser.add_argument("--llm", action="store_true", help="Enable LLM review")

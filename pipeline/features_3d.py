@@ -228,16 +228,18 @@ def extract_window(
     # Create a fresh FloorEstimator per sequence (no global state)
     floor_estimator = FloorEstimator()
 
-    # Subsample
-    skeletons = skeletons[::subsample]
-
     # Compute per-frame features
     features: list[np.ndarray] = []
-    for i, skel in enumerate(skeletons):
-        prev = skeletons[i - 1] if i > 0 else None
+    feature_indices: list[int] = []
+    prev_skel = None
+    for orig_idx in range(0, len(skeletons), subsample):
+        skel = skeletons[orig_idx]
+        prev = prev_skel
         f = compute_features(skel, prev, floor_estimator=floor_estimator)
+        prev_skel = skel
         if f is not None:
             features.append(f)
+            feature_indices.append(orig_idx)
 
     # F4: compute delta of torso angle (F3) — frame-to-frame change rate
     # This was previously a dead placeholder (f4=f3); now contains real signal.
@@ -261,7 +263,7 @@ def extract_window(
     for start in range(0, len(features) - window_size + 1, stride):
         window = np.array(features[start:start + window_size]).T  # (10, window_size)
         windows.append(window)
-        indices.append(start * subsample)  # map back to original frame index
+        indices.append(feature_indices[start])  # original frame index in input sequence
 
     return np.array(windows, dtype=np.float32), indices
 

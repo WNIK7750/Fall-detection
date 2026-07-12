@@ -120,6 +120,8 @@ class MCFDReader:
             # Don't add to offsets — offsets are relative to ref already
             # The shift is absorbed into start_frame
 
+        self.ref_start_frame = start_frame
+
         self._seek_positions = []
         self._effective_lengths = []
         for i, cid in enumerate(camera_ids):
@@ -142,8 +144,13 @@ class MCFDReader:
         self.total_frames = min(self._effective_lengths)
         self.current_frame = 0  # relative to seek start
 
-        self.end_frame = end_frame if end_frame is not None else self.total_frames
-        self.end_frame = min(self.end_frame, self.total_frames)
+        if end_frame is None:
+            self.end_frame = self.total_frames
+        else:
+            # end_frame is in reference-camera absolute coordinates; iteration
+            # uses frames relative to ref_start_frame after seeking.
+            requested = max(0, end_frame - self.ref_start_frame)
+            self.end_frame = min(requested, self.total_frames)
 
     @property
     def remaining(self) -> int:
@@ -225,11 +232,18 @@ def load_annotations(data_root: str) -> list[dict]:
 def find_fall_segments(
     annotations: list[dict],
     scenario: int,
+    cam_id: int | None = None,
 ) -> list[tuple[int, int]]:
-    """Return list of (start_frame, end_frame) where label==1 for given scenario."""
+    """Return (start_frame, end_frame) fall labels for a scenario.
+
+    If cam_id is provided, only labels from that camera are returned. This is
+    important when downstream code operates in a reference-camera timeline.
+    """
     segments = []
     for a in annotations:
         if a["chute"] == scenario and a["label"] == 1:
+            if cam_id is not None and a["cam"] != cam_id:
+                continue
             segments.append((a["start"], a["end"]))
     return segments
 

@@ -52,24 +52,53 @@ class FallClassifier:
         else:
             self.device = torch.device(device)
 
+        ckpt = self._load_checkpoint_data(checkpoint_path)
+        input_size = int(ckpt.get("input_size", input_size)) if isinstance(ckpt, dict) else input_size
+
         # Build model
         self.model = build_enhanced_model(
             input_size=input_size,
             hidden_size=128,
-            variant="full",
+            model_type="full",
         )
-        self._load_checkpoint(checkpoint_path)
+        self._load_checkpoint(ckpt)
         self.model.to(self.device)
         self.model.eval()
 
-    def _load_checkpoint(self, path: str):
+        self.scaler_mean: np.ndarray | None = None
+        self.scaler_scale: np.ndarray | None = None
+        if isinstance(ckpt, dict):
+            mean = ckpt.get("scaler_mean")
+            scale = ckpt.get("scaler_scale", ckpt.get("scaler_std"))
+            if mean is not None and scale is not None:
+                self.scaler_mean = np.asarray(mean, dtype=np.float32)
+                self.scaler_scale = np.asarray(scale, dtype=np.float32)
+                self.scaler_scale = np.where(self.scaler_scale == 0, 1.0, self.scaler_scale)
+
+    def _load_checkpoint_data(self, path: str):
+        """Load raw checkpoint data."""
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        return torch.load(path, map_location=self.device, weights_only=False)
+
+    def _load_checkpoint(self, ckpt):
         """Load checkpoint, handling various key formats."""
-        ckpt = torch.load(path, map_location=self.device, weights_only=True)
-        state = ckpt.get("model_state_dict", ckpt.get("state_dict", ckpt))
+        state = ckpt.get("model_state_dict", ckpt.get("state_dict", ckpt)) if isinstance(ckpt, dict) else ckpt
         # Handle module. prefix from DataParallel
         if any(k.startswith("module.") for k in state):
             state = {k[7:]: v for k, v in state.items()}
-        self.model.load_state_dict(state, strict=False)
+        self.model.load_state_dict(state, strict=True)
+
+    def _standardize(self, features: np.ndarray) -> np.ndarray:
+        """Apply training StandardScaler parameters if present in checkpoint."""
+        if self.scaler_mean is None or self.scaler_scale is None:
+            return features
+        if features.shape[-1] != len(self.scaler_mean):
+            raise ValueError(
+                f"Feature dimension {features.shape[-1]} does not match scaler "
+                f"dimension {len(self.scaler_mean)}"
+            )
+        return (features - self.scaler_mean) / self.scaler_scale
 
     def predict_proba(self, features: np.ndarray) -> np.ndarray:
         """Predict fall probability.
@@ -82,6 +111,7 @@ class FallClassifier:
         single = (features.ndim == 2)
         # Ensure shape (batch, 20, 10)
         x = features[np.newaxis, :, :] if single else features
+        x = self._standardize(x.astype(np.float32, copy=False))
         x = torch.tensor(x, dtype=torch.float32).to(self.device)
 
         with torch.no_grad():

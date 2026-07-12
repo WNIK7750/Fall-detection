@@ -127,7 +127,7 @@ class PoseDetector:
             if no valid person detected.
         """
         results = self.model(frames, device=self.device, verbose=False,
-                            batch=max(1, len(frames)))
+                            batch=min(self.infer_batch_size, max(1, len(frames))))
         all_keypoints: list[np.ndarray] = []
 
         for r in results:
@@ -182,7 +182,7 @@ class PoseDetector:
             Invalid detections (chairs/objects) are filtered out.
         """
         results = self.model(frames, device=self.device, verbose=False,
-                            batch=max(1, len(frames)))
+                            batch=min(self.infer_batch_size, max(1, len(frames))))
         all_persons: list[list[np.ndarray]] = []
 
         for r in results:
