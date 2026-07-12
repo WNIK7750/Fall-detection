@@ -2,7 +2,8 @@
 Multi-view triangulation: 2D keypoints from 3 cameras → 3D skeleton.
 
 Uses DLT (Direct Linear Transform) via OpenCV's triangulatePoints.
-Includes occlusion handling via re-projection feedback loop.
+Optional re-projection refinement is available for visualization, but is off
+by default because re-projected points are not independent observations.
 
 Usage:
     tri = Triangulator(projection_matrices=[P1, P4, P7])
@@ -15,7 +16,7 @@ import cv2
 
 
 class Triangulator:
-    """3-view DLT triangulation with occlusion-aware re-projection."""
+    """3-view DLT triangulation."""
 
     def __init__(
         self,
@@ -37,13 +38,14 @@ class Triangulator:
     def triangulate(
         self,
         keypoints_2d: list[np.ndarray],
-        apply_reprojection: bool = True,
+        apply_reprojection: bool = False,
     ) -> np.ndarray:
         """Triangulate 17 keypoints from 3 views into 3D coordinates.
 
         Args:
             keypoints_2d: List of 3 arrays, each (17, 3) — (x, y, conf).
-            apply_reprojection: If True, run occlusion-aware re-projection loop.
+            apply_reprojection: If True, run a visualization-oriented
+                re-projection loop. Keep this False for training/evaluation.
 
         Returns:
             (17, 3) array of 3D coordinates. Unreliable points are NaN.

@@ -63,7 +63,11 @@ class FloorEstimator:
 
     @property
     def floor_z(self) -> float:
-        return self._floor_z if self._floor_z is not None else 0.0
+        if self._floor_z is not None:
+            return self._floor_z
+        if self._z_values:
+            return float(np.percentile(self._z_values, 5))
+        return 0.0
 
     @property
     def ready(self) -> bool:
@@ -252,10 +256,10 @@ def extract_window(
     if len(features) < window_size:
         return np.empty((0, 10, window_size), dtype=np.float32), []
 
-    # Warn if floor never reached warmup (height features use default 0.0)
+    # Warn if floor never reached warmup (height features use provisional estimate)
     if not floor_estimator.ready:
         print("WARNING: floor estimator never reached warmup "
-              f"({len(features)} frames) — height features use default floor_z=0.0")
+              f"({len(features)} frames) — height features use provisional floor_z")
 
     # Sliding window
     windows = []

@@ -200,6 +200,8 @@ def run_demo(args):
 
             # Use view0's track IDs as the global person index for display
             view0_tracks = tracked[0] if len(tracked) > 0 else []
+            if args.max_people > 0:
+                view0_tracks = view0_tracks[:args.max_people]
             num_people = len(view0_tracks)
 
             if num_people == 0:
@@ -366,6 +368,8 @@ if __name__ == "__main__":
                         help="Classifier checkpoint path")
     parser.add_argument("--threshold-low", type=float, default=0.4)
     parser.add_argument("--threshold-high", type=float, default=0.85)
+    parser.add_argument("--max-people", type=int, default=1,
+                        help="Maximum people to triangulate; 1 avoids unreliable cross-view ID matching")
     parser.add_argument("--llm", action="store_true", help="Enable LLM review")
     parser.add_argument("--output", type=str, default=None, help="Output video file")
     args = parser.parse_args()
