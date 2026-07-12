@@ -64,6 +64,11 @@
 ### LLM: 4B-First Strategy
 - Use 4B to build and test full pipeline (fits 8GB VRAM comfortably)
 - After pipeline works end-to-end, evaluate if 8B upgrade is worthwhile
+- Current llama-cpp path uses `Qwen25VLChatHandler` plus the mmproj file for image input.
+- Suspected events now use dual-pass VL review:
+  1. raw visual pass on unmodified 3-camera collage
+  2. assisted pass on pose-overlaid collage plus YOLO/3D/classifier evidence
+  Final status is `fall` if either pass says fall above the confidence threshold.
 
 ### Pipeline Progress
 | Module | Status | Files |
@@ -72,11 +77,12 @@
 | M3: Triangulation | ✅ | `pipeline/calibration.py` (B-MCFD/Auvinet calibration), `triangulation.py`; reprojection refinement off by default |
 | M4: 3D Features | ✅ | `pipeline/features_3d.py` (10-D, floor-adaptive) |
 | M5: 3-Class Classifier | ✅ | `pipeline/classifier.py`, `extract_dataset_3d.py`, `train_3d.py`; best checkpoint `enhanced_3d_20260712_185406` |
-| M6: LLM Review | ⚠️ Next | `pipeline/llm_reviewer.py`; needs end-to-end demo integration test |
+| M6: LLM Review | ⚠️ Smoke passed | `pipeline/llm_reviewer.py`, `qa_llm_review.py`; needs broader scenario validation and end-to-end demo test |
 | M7: Demo | ✅ | `demo_multiview.py` (OpenCV viz, quality gating, default checkpoint set) |
 
 ### Remaining
-- Wire/test LLM review in full demo: `python demo_multiview.py --scenario 1 --llm`
+- Broader VL validation on more exported 90-frame clips.
+- Wire/test final camera/rolling-buffer integration around `review_llm_clip.py`.
 - Prepare demo materials (scenarios, clips, script)
 - Update README with current 3D pipeline and commands
 
@@ -112,6 +118,25 @@
   `python sweep_threshold.py --split test --device cuda`
 - Demo command:
   `python demo_multiview.py --scenario 1`
+- LLM smoke test command:
+  `python qa_llm_review.py --scenario 1 --kind both --frames 1 --view-mode collage`
+
+### Current LLM Smoke Result
+- Model: Qwen3-VL-4B GGUF + mmproj through `Qwen25VLChatHandler`
+- Input format: one recent three-camera collage frame; demo additionally runs a second assisted pass with pose overlays and structured evidence
+- Scenario 1 normal sample: `is_fall=false`, reason says walking normally
+- Scenario 1 fall sample: `is_fall=true`, confidence 0.95, reason says lying horizontally on white crash mat
+- Demo integration uses `--llm-frames 1` and `--llm-min-confidence 0.60`; low-confidence false results keep status as `suspected`
+
+### LLM Clip Review Boundary
+- Production camera/buffer layer should export a short event clip, e.g. 90 frames at 30fps.
+- LLM layer receives that clip file and does not own rolling-buffer storage.
+- Default review policy: sample every 9th frame, cap at 10 frames, pack into one contact-sheet timeline image.
+- Verified smoke result on `clips/s01_1050_90.mp4`: `is_fall=true`, confidence 0.95, ~12s vision processing on current machine.
+- Review command for an exported clip:
+  `python review_llm_clip.py --video clips/event_001.mp4`
+- QA-only MCFD clip export command:
+  `python export_mcfd_clip.py --scenario 1 --start-frame 1050 --frames 90 --output clips/s01_1050_90.mp4`
 
 ---
 
@@ -162,6 +187,11 @@
 | **Total** | **~7.8 GB** | ⚠️ Very tight — requires layer offloading |
 
 **Mitigation**: Set `n_gpu_layers` to offload ~5-10 layers to CPU, or use Qwen3-VL-4B (~3.6GB total, fits easily).
+
+### Real-time 3-Camera Feasibility
+- The viable design is event-driven: YOLO + 3D classifier run continuously; VL review runs only on suspected windows.
+- For a 16GB demo target, keep the VL model at 4B, avoid concurrent LLM calls, and keep YOLO at `yolov8n-pose`.
+- This should fit a 5070 Ti-class machine for roadshow use if suspected triggers are rare; it is not a production high-throughput design.
 
 ---
 

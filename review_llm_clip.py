@@ -1,0 +1,59 @@
+"""
+Review an already-exported short video clip with Qwen3-VL.
+
+Boundary:
+  - Camera control / rolling buffer code exports a short clip, e.g. 90 frames.
+  - This script only decodes that clip, samples ordered frames, and asks the VL
+    model whether the motion shows a fall.
+
+Example:
+    python review_llm_clip.py --video clips/event_001.mp4
+"""
+
+import argparse
+import json
+from pathlib import Path
+
+from pipeline.llm_reviewer import LLMFallReviewer
+
+
+BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_MODEL = BASE_DIR / "models" / "llm" / "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
+DEFAULT_MMPROJ = BASE_DIR / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Review a short fall-event clip with Qwen3-VL")
+    parser.add_argument("--video", required=True, help="Path to an already-exported short clip")
+    parser.add_argument("--frame-stride", type=int, default=9,
+                        help="Sample every Nth frame; 90 frames with stride 9 -> 10 frames")
+    parser.add_argument("--max-frames", type=int, default=10,
+                        help="Safety cap for sampled frames sent to the VL model")
+    parser.add_argument("--no-contact-sheet", action="store_true",
+                        help="Send sampled frames separately instead of one timeline contact sheet")
+    parser.add_argument("--model", type=str, default=str(DEFAULT_MODEL))
+    parser.add_argument("--mmproj", type=str, default=str(DEFAULT_MMPROJ))
+    parser.add_argument("--n-gpu-layers", type=int, default=-1)
+    parser.add_argument("--n-ctx", type=int, default=4096)
+    args = parser.parse_args()
+
+    reviewer = LLMFallReviewer(
+        model_path=args.model,
+        mmproj_path=args.mmproj,
+        n_ctx=args.n_ctx,
+        n_gpu_layers=args.n_gpu_layers,
+    )
+    if not reviewer.ready:
+        raise SystemExit("LLM reviewer failed to load")
+
+    result = reviewer.review_video_file(
+        video_path=args.video,
+        frame_stride=args.frame_stride,
+        max_frames=args.max_frames,
+        contact_sheet=not args.no_contact_sheet,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

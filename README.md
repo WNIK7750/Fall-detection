@@ -221,6 +221,27 @@ python threshold_sweep.py
 
 ---
 
+## 3D + LLM 补充说明
+
+当前仓库已经补上多视角 3D 路线和本地 Qwen3-VL 复核入口：
+
+- `demo_multiview.py`：3 路视频 -> YOLO -> 3D -> 分类器 -> LLM
+- `export_mcfd_clip.py`：从 MCFD 导出短片段，供 LLM 复核测试
+- `review_llm_clip.py`：读取已导出的短视频，默认抽 10 帧并拼成 contact sheet 送入 Qwen3-VL
+
+默认 LLM 复核命令：
+
+```bash
+python review_llm_clip.py --video clips/event_001.mp4
+```
+
+默认接口约定：
+- 输入是上游导出的短视频片段，不负责滚动缓存
+- 默认采样策略是 90 帧短片段、每 9 帧抽 1 帧、最多 10 帧
+- 这些帧会先拼成一张时间序列图，再送给 Qwen3-VL
+
+---
+
 ## 📦 依赖清单（requirements.txt）
 
 ```

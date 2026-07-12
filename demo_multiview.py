@@ -35,7 +35,7 @@ from pipeline.pose_inference import PoseDetector, MultiViewPoseVisualizer, Multi
 from pipeline.triangulation import Triangulator, KalmanSmoother
 from pipeline.features_3d import compute_features, extract_window, FloorEstimator
 from pipeline.classifier import FallClassifier, HeuristicClassifier
-from pipeline.llm_reviewer import LLMFallReviewer
+from pipeline.llm_reviewer import LLMFallReviewer, make_multiview_collage
 from pipeline.calibration import get_projections, undistort_keypoints
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -108,6 +108,43 @@ def draw_3d_skeleton(img: np.ndarray, skeleton_3d: np.ndarray, size: int = 200) 
     return canvas
 
 
+def build_llm_context_collage(
+    frames: list[np.ndarray],
+    tracked: list[list[tuple[int, np.ndarray]]],
+    camera_ids: list[int],
+    current_status: str,
+    current_quality: float,
+    evidence_lines: list[str],
+) -> np.ndarray:
+    """Create a collage with pose overlays and compact text evidence."""
+    vis_frames = []
+    colors = [GREEN, (255, 255, 0), (0, 255, 255), (255, 0, 255)]
+    for v, frame in enumerate(frames):
+        vis = frame.copy()
+        v_tracks = tracked[v] if v < len(tracked) else []
+        for pidx, (track_id, kp) in enumerate(v_tracks):
+            color = colors[pidx % len(colors)]
+            vis = MultiViewPoseVisualizer.draw_keypoints(vis, kp, color=color)
+            valid = kp[:, 2] > 0.3
+            if valid.any():
+                cx, cy = int(kp[valid, 0].mean()), int(kp[valid, 1].min()) - 10
+                cv2.putText(vis, f"T{track_id}", (cx - 15, cy),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
+        status_text = f"Cam{camera_ids[v]} | {current_status.upper()} | Q={current_quality:.2f}"
+        vis = draw_status_bar(vis, status_text, {"normal": GREEN, "suspected": YELLOW, "fall": RED}.get(current_status, WHITE))
+        vis_frames.append(vis)
+
+    if evidence_lines:
+        footer = np.zeros_like(vis_frames[0])
+        y = 24
+        for line in evidence_lines[:4]:
+            cv2.putText(footer, line[:80], (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.48, WHITE, 1)
+            y += 22
+        vis_frames.append(footer)
+
+    return np.hstack(vis_frames)
+
+
 def run_demo(args):
     data_root = os.path.join(os.path.dirname(__file__), "dataset", "mcfd")
     camera_ids = args.cameras or [1, 4, 7]
@@ -117,7 +154,7 @@ def run_demo(args):
 
     # --- Init modules ---
     print("Loading YOLOv8n-pose...")
-    detector = PoseDetector()
+    detector = PoseDetector(enable_fallback=False)
 
     print("Loading triangulation...")
     projections = get_projections(camera_ids)
@@ -175,6 +212,8 @@ def run_demo(args):
     current_status = "normal"
     current_quality = 1.0
     llm_result = None
+    main_cls_result = None
+    main_feature_window = None
     paused = False
     frame_idx = 0
 
@@ -287,6 +326,9 @@ def run_demo(args):
                     mean_quality = float(np.mean(recent_quality)) if recent_quality else 0.0
                     if mean_quality < args.quality_threshold and status == "fall":
                         status = "suspected"
+                    if pidx == 0:
+                        main_cls_result = cls_result
+                        main_feature_window = window
                 pstate['status'] = status
                 all_statuses.append(status)
 
@@ -294,19 +336,49 @@ def run_demo(args):
                     current_status = status
                     current_quality = quality["score"]
 
-            # 4. LLM Review (on "suspected" for main person)
-            if current_status == "suspected" and reviewer and reviewer.ready:
-                if len(frame_buffer) >= 3:
-                    llm_result = reviewer.review(frame_buffer[-3:])
-                    if llm_result.get("is_fall"):
-                        current_status = "fall"
-                    elif llm_result.get("is_fall") is False:
-                        current_status = "normal"
-                frame_buffer = []
-
-            frame_buffer.append(frames[1].copy())
+            current_raw_collage = make_multiview_collage(frames, labels=[f"Cam{cid}" for cid in camera_ids])
+            frame_buffer.append(current_raw_collage)
             if len(frame_buffer) > 10:
                 frame_buffer.pop(0)
+
+            # 4. LLM Review (on "suspected" for main person)
+            if current_status == "suspected" and reviewer and reviewer.ready:
+                if len(frame_buffer) >= args.llm_frames:
+                    if main_cls_result:
+                        cls_line = f"3D fall prob={main_cls_result['fall_prob']:.3f}"
+                        evidence = (
+                            f"3D classifier: {main_cls_result['class_name']} "
+                            f"(p_fall={main_cls_result['fall_prob']:.3f}, "
+                            f"thresholds={main_cls_result['threshold_low']:.2f}/{main_cls_result['threshold_high']:.2f}); "
+                            f"recent skeleton quality={current_quality:.2f}; "
+                            f"window_shape={None if main_feature_window is None else list(main_feature_window.shape)}"
+                        )
+                    else:
+                        cls_line = "3D fall prob=n/a"
+                        evidence = f"3D classifier result unavailable; recent skeleton quality={current_quality:.2f}"
+                    review_frames_raw = frame_buffer[-args.llm_frames:]
+                    review_frames_ctx = [
+                        build_llm_context_collage(
+                            frames,
+                            tracked,
+                            camera_ids,
+                            current_status,
+                            current_quality,
+                            [
+                                cls_line,
+                                f"quality={current_quality:.2f}",
+                                f"window={len(main_feature_window) if main_feature_window is not None else 0}x10",
+                            ],
+                        )
+                    ]
+                    llm_result = reviewer.review_dual(
+                        raw_frames=review_frames_raw,
+                        context_frames=review_frames_ctx,
+                        evidence=evidence,
+                        min_confidence=args.llm_min_confidence,
+                    )
+                    current_status = llm_result.get("final_status", current_status)
+                frame_buffer = []
 
             # 5. Visualization — draw ALL persons per view
             vis_frames = []
@@ -349,7 +421,7 @@ def run_demo(args):
 
             # LLM result overlay
             if llm_result:
-                llm_text = f"LLM: {llm_result.get('reason', '')[:80]}"
+                llm_text = f"LLM: {llm_result.get('final_status', llm_result.get('reason', ''))[:80]}"
                 cv2.putText(combined, llm_text, (10, combined.shape[0] - 20),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, ORANGE, 1)
 
@@ -391,6 +463,10 @@ if __name__ == "__main__":
     parser.add_argument("--quality-threshold", type=float, default=0.45,
                         help="Mean recent skeleton quality below this downgrades fall to suspected")
     parser.add_argument("--llm", action="store_true", help="Enable LLM review")
+    parser.add_argument("--llm-frames", type=int, default=1,
+                        help="Number of recent multiview collage frames to send to the LLM")
+    parser.add_argument("--llm-min-confidence", type=float, default=0.60,
+                        help="LLM result below this confidence keeps the status suspected")
     parser.add_argument("--output", type=str, default=None, help="Output video file")
     args = parser.parse_args()
     run_demo(args)
