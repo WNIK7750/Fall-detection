@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 
 from demo_multiview import draw_3d_skeleton
-from pipeline.calibration import get_projections
+from pipeline.calibration import get_projections, undistort_keypoints
 from pipeline.pose_inference import MultiViewPoseVisualizer, PoseDetector
 from pipeline.triangulation import Triangulator
 from pipeline.video_reader import MCFDReader, find_fall_segments, load_annotations
@@ -117,6 +117,7 @@ def main():
             args.cameras,
             start_frame=frame_idx,
             end_frame=frame_idx + 1,
+            undistort=False,
         ) as reader:
             batch = list(reader)
         if not batch:
@@ -124,10 +125,22 @@ def main():
             continue
 
         frames = batch[0]
-        keypoints = detector.infer_batch(frames)
-        skeleton_3d = tri.triangulate(keypoints)
-        quality = tri.compute_quality(keypoints, skeleton_3d)
-        canvas = render_sample(frames, keypoints, skeleton_3d, quality, args.cameras, label, frame_idx)
+        keypoints_raw = detector.infer_batch(frames)
+        keypoints_undist = [
+            undistort_keypoints(kp, args.cameras[v])
+            for v, kp in enumerate(keypoints_raw)
+        ]
+        skeleton_3d = tri.triangulate(keypoints_undist)
+        quality = tri.compute_quality(keypoints_undist, skeleton_3d)
+        canvas = render_sample(
+            frames,
+            keypoints_raw,
+            skeleton_3d,
+            quality,
+            args.cameras,
+            label,
+            frame_idx,
+        )
 
         out_path = os.path.join(
             args.out_dir,

@@ -55,6 +55,10 @@ class PoseDetector:
         person_conf_threshold: float = 0.5,
         min_valid_keypoints: int = 5,
         kp_conf_threshold: float = 0.3,
+        yolo_conf_threshold: float = 0.05,
+        fallback_person_conf_threshold: float = 0.05,
+        fallback_min_valid_keypoints: int = 5,
+        fallback_kp_conf_threshold: float = 0.10,
         infer_batch_size: int = 32,
     ):
         """
@@ -66,6 +70,9 @@ class PoseDetector:
             min_valid_keypoints: Minimum number of keypoints with confidence
                 > kp_conf_threshold to accept a person detection.
             kp_conf_threshold: Per-keypoint confidence threshold.
+            yolo_conf_threshold: YOLO detection threshold. Kept low so fallback
+                can recover prone/small people that default YOLO filtering drops.
+            fallback_*: Relaxed filters used only if strict filters find nobody.
             infer_batch_size: YOLO internal batch size. MUST be > 1 for GPU utilization.
         """
         self.model = YOLO(model_path)
@@ -73,6 +80,10 @@ class PoseDetector:
         self.person_conf_threshold = person_conf_threshold
         self.min_valid_keypoints = min_valid_keypoints
         self.kp_conf_threshold = kp_conf_threshold
+        self.yolo_conf_threshold = yolo_conf_threshold
+        self.fallback_person_conf_threshold = fallback_person_conf_threshold
+        self.fallback_min_valid_keypoints = fallback_min_valid_keypoints
+        self.fallback_kp_conf_threshold = fallback_kp_conf_threshold
         self.infer_batch_size = infer_batch_size
 
     @staticmethod
@@ -83,7 +94,16 @@ class PoseDetector:
         except ImportError:
             return False
 
-    def _is_valid_person(self, r, p_idx: int, kps: np.ndarray, confs: np.ndarray) -> bool:
+    def _is_valid_person(
+        self,
+        r,
+        p_idx: int,
+        kps: np.ndarray,
+        confs: np.ndarray,
+        person_conf_threshold: float | None = None,
+        min_valid_keypoints: int | None = None,
+        kp_conf_threshold: float | None = None,
+    ) -> bool:
         """Check whether detection p_idx is a valid person (not a chair/object).
 
         Filters using:
@@ -99,21 +119,52 @@ class PoseDetector:
         Returns:
             True if detection passes all filters.
         """
+        person_conf_threshold = (
+            self.person_conf_threshold if person_conf_threshold is None else person_conf_threshold
+        )
+        min_valid_keypoints = (
+            self.min_valid_keypoints if min_valid_keypoints is None else min_valid_keypoints
+        )
+        kp_conf_threshold = self.kp_conf_threshold if kp_conf_threshold is None else kp_conf_threshold
+
         # Filter 1: YOLO person detection confidence
         if hasattr(r, 'boxes') and r.boxes is not None:
             try:
                 box_conf = float(r.boxes.conf[p_idx].cpu().numpy())
             except (IndexError, AttributeError):
                 box_conf = 0.0
-            if box_conf < self.person_conf_threshold:
+            if box_conf < person_conf_threshold:
                 return False
 
         # Filter 2: minimum valid keypoints
-        n_valid = int((confs > self.kp_conf_threshold).sum())
-        if n_valid < self.min_valid_keypoints:
+        n_valid = int((confs > kp_conf_threshold).sum())
+        if n_valid < min_valid_keypoints:
             return False
 
         return True
+
+    def _valid_person_indices(self, r, kps_all: np.ndarray, confs_all: np.ndarray) -> tuple[list[int], float]:
+        """Return valid person indices and the keypoint threshold used."""
+        valid_indices = [
+            p for p in range(len(kps_all))
+            if self._is_valid_person(r, p, kps_all[p], confs_all[p])
+        ]
+        if valid_indices:
+            return valid_indices, self.kp_conf_threshold
+
+        fallback_indices = [
+            p for p in range(len(kps_all))
+            if self._is_valid_person(
+                r,
+                p,
+                kps_all[p],
+                confs_all[p],
+                person_conf_threshold=self.fallback_person_conf_threshold,
+                min_valid_keypoints=self.fallback_min_valid_keypoints,
+                kp_conf_threshold=self.fallback_kp_conf_threshold,
+            )
+        ]
+        return fallback_indices, self.fallback_kp_conf_threshold
 
     def infer_batch(self, frames: list[np.ndarray]) -> list[np.ndarray]:
         """Run pose detection on a batch of frames (one per camera view).
@@ -127,7 +178,8 @@ class PoseDetector:
             if no valid person detected.
         """
         results = self.model(frames, device=self.device, verbose=False,
-                            batch=min(self.infer_batch_size, max(1, len(frames))))
+                            batch=min(self.infer_batch_size, max(1, len(frames))),
+                            conf=self.yolo_conf_threshold)
         all_keypoints: list[np.ndarray] = []
 
         for r in results:
@@ -140,11 +192,8 @@ class PoseDetector:
             img_w = r.orig_shape[1] if hasattr(r, 'orig_shape') else 640
             img_h = r.orig_shape[0] if hasattr(r, 'orig_shape') else 640
 
-            # Filter valid persons first (exclude chairs/objects)
-            valid_indices = []
-            for p in range(len(kps_all)):
-                if self._is_valid_person(r, p, kps_all[p], confs_all[p]):
-                    valid_indices.append(p)
+            # Filter valid persons first; fallback only if strict filtering finds nobody.
+            valid_indices, center_kp_threshold = self._valid_person_indices(r, kps_all, confs_all)
 
             if not valid_indices:
                 all_keypoints.append(np.zeros((17, 3), dtype=np.float32))
@@ -156,7 +205,7 @@ class PoseDetector:
                 # Pick valid person closest to image center
                 centers = []
                 for p in valid_indices:
-                    valid_kp = confs_all[p] > self.kp_conf_threshold
+                    valid_kp = confs_all[p] > center_kp_threshold
                     if valid_kp.any():
                         cx = kps_all[p][valid_kp, 0].mean()
                         cy = kps_all[p][valid_kp, 1].mean()
@@ -182,7 +231,8 @@ class PoseDetector:
             Invalid detections (chairs/objects) are filtered out.
         """
         results = self.model(frames, device=self.device, verbose=False,
-                            batch=min(self.infer_batch_size, max(1, len(frames))))
+                            batch=min(self.infer_batch_size, max(1, len(frames))),
+                            conf=self.yolo_conf_threshold)
         all_persons: list[list[np.ndarray]] = []
 
         for r in results:
@@ -195,13 +245,12 @@ class PoseDetector:
             img_w = r.orig_shape[1] if hasattr(r, 'orig_shape') else 640
             img_h = r.orig_shape[0] if hasattr(r, 'orig_shape') else 640
 
-            # Filter: only keep valid persons, compute center distance
+            # Filter: only keep valid persons, compute center distance.
+            valid_indices, center_kp_threshold = self._valid_person_indices(r, kps_all, confs_all)
             valid_persons = []
-            for p in range(len(kps_all)):
-                if not self._is_valid_person(r, p, kps_all[p], confs_all[p]):
-                    continue
+            for p in valid_indices:
                 kp = np.column_stack([kps_all[p], confs_all[p]]).astype(np.float32)
-                valid_kp = confs_all[p] > self.kp_conf_threshold
+                valid_kp = confs_all[p] > center_kp_threshold
                 if valid_kp.any():
                     cx, cy = kps_all[p][valid_kp, 0].mean(), kps_all[p][valid_kp, 1].mean()
                     dist = ((cx - img_w/2)**2 + (cy - img_h/2)**2)**0.5

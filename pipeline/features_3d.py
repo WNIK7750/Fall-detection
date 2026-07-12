@@ -291,7 +291,7 @@ if __name__ == "__main__":
     import sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-    from pipeline.calibration import DEFAULT_PROJECTIONS
+    from pipeline.calibration import DEFAULT_CAMERAS, DEFAULT_PROJECTIONS, undistort_keypoints
     from pipeline.video_reader import MCFDReader
     from pipeline.pose_inference import PoseDetector
     from pipeline.triangulation import Triangulator, KalmanSmoother
@@ -305,11 +305,15 @@ if __name__ == "__main__":
 
     # Process 200 frames of scenario 1
     all_skeletons = []
-    with MCFDReader(root, scenario=1, camera_ids=[1, 4, 7]) as reader:
+    with MCFDReader(root, scenario=1, camera_ids=DEFAULT_CAMERAS, undistort=False) as reader:
         for i, frames in enumerate(reader):
             if i >= 200:
                 break
             kps = detector.infer_batch(frames)
+            kps = [
+                undistort_keypoints(kp, cam_id)
+                for kp, cam_id in zip(kps, DEFAULT_CAMERAS)
+            ]
             skel = tri.triangulate(kps)
             skel = smoother.update(skel)
             all_skeletons.append(skel)

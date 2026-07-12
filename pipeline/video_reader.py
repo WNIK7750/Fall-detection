@@ -25,9 +25,11 @@ class MCFDReader:
     Supports per-camera frame offsets for approximate time synchronization.
     Offsets are estimated from data_tuple3.csv fall segment annotations.
 
-    Optional lens undistortion using precomputed cv2 remap maps. MCFD cameras
-    have significant radial distortion (k1 ≈ -0.4), and undistorting is
-    essential for correct 3D triangulation.
+    Optional lens undistortion using precomputed cv2 remap maps.
+
+    For YOLO pose extraction, prefer undistort=False and then undistort the
+    detected keypoints before triangulation. YOLO is more stable on the natural
+    camera image, while triangulation still needs undistorted coordinates.
     """
 
     def __init__(
@@ -55,7 +57,8 @@ class MCFDReader:
                      If None, auto-compute from annotations.
             ref_cam: Reference camera ID for offsets (default cam1).
             undistort: If True, apply lens undistortion before resize+pad.
-                       Requires calibration data. Recommended for 3D triangulation.
+                       For YOLO pose, keep this False and use
+                       calibration.undistort_keypoints() before triangulation.
         """
         self.scenario = scenario
         self.camera_ids = camera_ids

@@ -259,7 +259,7 @@ if __name__ == "__main__":
     import sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-    from pipeline.calibration import DEFAULT_PROJECTIONS
+    from pipeline.calibration import DEFAULT_PROJECTIONS, DEFAULT_CAMERAS, undistort_keypoints
     from pipeline.video_reader import MCFDReader
     from pipeline.pose_inference import PoseDetector
 
@@ -271,11 +271,15 @@ if __name__ == "__main__":
     detector = PoseDetector()
 
     print("Testing triangulation on 10 frames...")
-    with MCFDReader(root, scenario=1, camera_ids=[1, 4, 7]) as reader:
+    with MCFDReader(root, scenario=1, camera_ids=DEFAULT_CAMERAS, undistort=False) as reader:
         for i, frames in enumerate(reader):
             if i >= 10:
                 break
             kps_2d = detector.infer_batch(frames)
+            kps_2d = [
+                undistort_keypoints(kp, cam_id)
+                for kp, cam_id in zip(kps_2d, DEFAULT_CAMERAS)
+            ]
             skel_3d = tri.triangulate(kps_2d)
             skel_3d = smoother.update(skel_3d)
 

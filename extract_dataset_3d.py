@@ -22,6 +22,7 @@ from pipeline.video_reader import MCFDReader, load_annotations, find_fall_segmen
 from pipeline.pose_inference import PoseDetector
 from pipeline.triangulation import Triangulator, KalmanSmoother
 from pipeline.features_3d import extract_window
+from pipeline.calibration import undistort_keypoints
 
 # Extraction parameters
 FALL_SUBSAMPLE = 2     # denser for fall segments
@@ -79,7 +80,8 @@ def extract_and_window(
         smoother = KalmanSmoother()
         range_skeletons = []
         with MCFDReader(data_root, scenario, camera_ids,
-                        start_frame=start, end_frame=end) as reader:
+                        start_frame=start, end_frame=end,
+                        undistort=False) as reader:
             # Time-batched YOLO inference: collect N timesteps, run one GPU call
             time_batch: list[list[np.ndarray]] = []  # [[cam1,cam2,cam3], ...]
             batch_size = time_batch_size
@@ -97,7 +99,10 @@ def extract_and_window(
                 # De-interleave back into per-timestep (17,3) arrays
                 num_views = len(camera_ids)
                 for t in range(len(time_batch)):
-                    kps = [flat_kps[t * num_views + v] for v in range(num_views)]
+                    kps = [
+                        undistort_keypoints(flat_kps[t * num_views + v], camera_ids[v])
+                        for v in range(num_views)
+                    ]
                     skel = tri.triangulate(kps)
                     skel = smoother.update(skel)
                     range_skeletons.append(skel)
@@ -109,7 +114,10 @@ def extract_and_window(
                 flat_kps = detector.infer_batch(flat_frames)
                 num_views = len(camera_ids)
                 for t in range(len(time_batch)):
-                    kps = [flat_kps[t * num_views + v] for v in range(num_views)]
+                    kps = [
+                        undistort_keypoints(flat_kps[t * num_views + v], camera_ids[v])
+                        for v in range(num_views)
+                    ]
                     skel = tri.triangulate(kps)
                     skel = smoother.update(skel)
                     range_skeletons.append(skel)

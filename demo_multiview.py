@@ -36,7 +36,7 @@ from pipeline.triangulation import Triangulator, KalmanSmoother
 from pipeline.features_3d import compute_features, extract_window, FloorEstimator
 from pipeline.classifier import FallClassifier, HeuristicClassifier
 from pipeline.llm_reviewer import LLMFallReviewer
-from pipeline.calibration import get_projections
+from pipeline.calibration import get_projections, undistort_keypoints
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_3D_CHECKPOINT = os.path.join(
@@ -178,7 +178,7 @@ def run_demo(args):
     paused = False
     frame_idx = 0
 
-    with MCFDReader(data_root, scenario, camera_ids) as reader:
+    with MCFDReader(data_root, scenario, camera_ids, undistort=False) as reader:
         cv2.namedWindow("Fall Detection Demo", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Fall Detection Demo", 1600, 600)
 
@@ -236,19 +236,26 @@ def run_demo(args):
                     }
                 pstate = person_states[track_id]
 
-                # Collect keypoints across all views for this person
+                # Collect raw keypoints across all views for this person.
+                # Keep raw coordinates for drawing; undistort keypoints only
+                # before triangulation so YOLO sees the natural camera image.
                 # Map track_id in each view to the corresponding detection
-                person_kps = []
+                person_kps_raw = []
                 for v in range(len(tracked)):
                     # Find the detection with matching track_id, or use the same index
                     # if tracking is consistent across views (common for single person)
                     v_tracks = tracked[v]
                     if v == 0:
-                        person_kps.append(kp_view0)
+                        person_kps_raw.append(kp_view0)
                     elif pidx < len(v_tracks):
-                        person_kps.append(v_tracks[pidx][1])
+                        person_kps_raw.append(v_tracks[pidx][1])
                     else:
-                        person_kps.append(np.zeros((17, 3), dtype=np.float32))
+                        person_kps_raw.append(np.zeros((17, 3), dtype=np.float32))
+
+                person_kps = [
+                    undistort_keypoints(kp, camera_ids[v])
+                    for v, kp in enumerate(person_kps_raw)
+                ]
 
                 # Triangulation
                 raw_skel = tri.triangulate(person_kps)
