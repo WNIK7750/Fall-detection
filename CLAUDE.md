@@ -31,7 +31,7 @@ All P0-P3 roadshow tasks are implemented.
 - Dashboard: `web/monitor_dashboard.html`
 - LLM clip review: `scripts/qa/review_llm_clip.py`, `scripts/qa/qa_llm_clip_batch.py`
 - Current 3D checkpoint: `checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth`
-- Default thresholds: low `0.30`, high `0.40`
+- Default thresholds: low `0.40`, high `0.80`
 
 Current best 3D classifier notes:
 
@@ -47,10 +47,10 @@ This project targets elderly-home cameras connected to community staff. Treat pr
 - Process camera streams locally where possible.
 - Do not continuously upload or persist full video streams.
 - Keep a rolling in-memory buffer on the client.
-- Send an immediate `suspected` event without video when `0.30 <= p_fall < 0.40`.
-- Export/share only the latest 90-frame clip when a suspected event needs review.
+- Send an immediate `suspected` event without video when `0.40 <= p_fall < 0.80`.
+- Export/share only the latest 90-frame raw clip when a suspected event needs review. Rolling buffer keeps 600 frames (~20s at 30 FPS); Qwen3-VL samples the clip with stride 10 and max 9 frames.
 - Use the same `event_id` for initial suspected alert and final LLM update.
-- Direct `fall` events (`p_fall >= 0.40`) skip LLM by default.
+- Direct `fall` events (`p_fall >= 0.80`) skip LLM by default.
 
 ## Roadshow Commands
 

@@ -23,6 +23,7 @@ from contextlib import asynccontextmanager
 import json
 import os
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -271,8 +272,69 @@ def event_clip_path(event_id: str) -> Path | None:
     return None
 
 
-def mjpeg_frames(path: Path):
+def clip_meta_for_event(event: dict[str, Any], path: Path) -> dict[str, Any]:
+    meta = event.get("clip_meta")
+    if isinstance(meta, dict) and meta.get("frame_count"):
+        return meta
+
     cap = cv2.VideoCapture(str(path))
+    try:
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
+    finally:
+        cap.release()
+    return {
+        "frame_count": frame_count,
+        "fps": fps,
+        "start_frame": None,
+        "end_frame": None,
+        "start_timestamp_sec": None,
+        "end_timestamp_sec": None,
+        "duration_sec": round(frame_count / max(fps, 1e-6), 3) if frame_count else None,
+    }
+
+
+@app.get("/api/events/{event_id}/clip-meta")
+async def clip_meta(event_id: str) -> JSONResponse:
+    event = next((item for item in events if item.get("event_id") == event_id), None)
+    if not event or not event.get("video_released"):
+        return JSONResponse({"ok": False, "error": "video not released"}, status_code=403)
+    path = event_clip_path(event_id)
+    if path is None or not path.exists():
+        return JSONResponse({"ok": False, "error": "clip not found"}, status_code=404)
+    return JSONResponse({"ok": True, "meta": clip_meta_for_event(event, path)})
+
+
+@app.get("/api/events/{event_id}/clip-frame/{frame_index}")
+async def clip_frame(event_id: str, frame_index: int) -> Response:
+    event = next((item for item in events if item.get("event_id") == event_id), None)
+    if not event or not event.get("video_released"):
+        return Response(status_code=403)
+    path = event_clip_path(event_id)
+    if path is None or not path.exists():
+        return Response(status_code=404)
+
+    cap = cv2.VideoCapture(str(path))
+    try:
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        if frame_count <= 0:
+            return Response(status_code=404)
+        idx = max(0, min(int(frame_index), frame_count - 1))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ok, frame = cap.read()
+        if not ok:
+            return Response(status_code=404)
+        ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 86])
+        if not ok:
+            return Response(status_code=500)
+        return Response(content=encoded.tobytes(), media_type="image/jpeg")
+    finally:
+        cap.release()
+
+
+def mjpeg_frames(path: Path, playback_fps: float = 30.0):
+    cap = cv2.VideoCapture(str(path))
+    delay = 1.0 / max(playback_fps, 1e-6)
     try:
         while cap.isOpened():
             ok, frame = cap.read()
@@ -287,6 +349,7 @@ def mjpeg_frames(path: Path):
                 + encoded.tobytes()
                 + b"\r\n"
             )
+            time.sleep(delay)
     finally:
         cap.release()
 

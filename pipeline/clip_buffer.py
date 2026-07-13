@@ -17,6 +17,17 @@ class BufferedFrame:
     image: np.ndarray
 
 
+@dataclass
+class ClipExportInfo:
+    path: str
+    frame_count: int
+    fps: float
+    start_frame: int
+    end_frame: int
+    start_timestamp_sec: float
+    end_timestamp_sec: float
+
+
 class RollingClipBuffer:
     """Keep recent frames in memory and export clips only on trigger.
 
@@ -46,8 +57,13 @@ class RollingClipBuffer:
             return []
         return list(self._frames)[-frames:]
 
-    def export_latest(self, output_path: str | Path, frames: int = 90, fps: float | None = None) -> str | None:
-        """Export latest N frames to a clip. Returns path or None if unavailable."""
+    def export_latest_info(
+        self,
+        output_path: str | Path,
+        frames: int = 90,
+        fps: float | None = None,
+    ) -> ClipExportInfo | None:
+        """Export latest N frames and return path plus timing metadata."""
         if not self.can_export(frames):
             return None
 
@@ -59,7 +75,8 @@ class RollingClipBuffer:
         output.parent.mkdir(parents=True, exist_ok=True)
 
         h, w = selected[0].image.shape[:2]
-        writer = _open_video_writer(output, fps or self.fps, (w, h))
+        output_fps = fps or self.fps
+        writer = _open_video_writer(output, output_fps, (w, h))
         try:
             for item in selected:
                 frame = item.image
@@ -69,7 +86,20 @@ class RollingClipBuffer:
         finally:
             writer.release()
 
-        return str(output)
+        return ClipExportInfo(
+            path=str(output),
+            frame_count=len(selected),
+            fps=float(output_fps),
+            start_frame=int(selected[0].frame_index),
+            end_frame=int(selected[-1].frame_index),
+            start_timestamp_sec=float(selected[0].timestamp_sec),
+            end_timestamp_sec=float(selected[-1].timestamp_sec),
+        )
+
+    def export_latest(self, output_path: str | Path, frames: int = 90, fps: float | None = None) -> str | None:
+        """Export latest N frames to a clip. Returns path or None if unavailable."""
+        info = self.export_latest_info(output_path, frames=frames, fps=fps)
+        return None if info is None else info.path
 
 
 def _open_video_writer(output: Path, fps: float, size: tuple[int, int]) -> cv2.VideoWriter:

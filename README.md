@@ -9,7 +9,7 @@
 - 多视角三角测量生成 3D 骨架
 - 10 维 3D 特征 + BiLSTM/BiGRU/Attention 分类器
 - 三级策略：`normal` / `suspected` / `fall`
-- `suspected` 事件自动导出最近 90 帧 clip 并调用 Qwen3-VL
+- `suspected` 事件自动导出最近 90 帧原始 clip，并抽帧调用 Qwen3-VL
 - 本地/LAN WebSocket dashboard 展示 `suspected` 与 `fall` 两列事件
 - 无摄像头 playmode 可稳定演示完整主循环
 
@@ -21,7 +21,7 @@
 
 - 客户端只在 `suspected` 或 `fall` 时发送事件。
 - `suspected` 第一时间只发送不含视频的告警和 3D classifier probability。
-- 只有需要复核时才从内存 rolling buffer 导出最近 90 帧短片段。
+- 只有需要复核时才从内存 rolling buffer 导出最近 90 帧短片段；rolling buffer 默认保留 600 帧，约 20 秒。
 - LLM 复核完成后，用同一个 `event_id` 更新事件状态。
 - 数据集视频、LLM GGUF 权重、生成 clips 不进入 Git。
 - 当前 `features/3d/` 体积很小，保留在 Git 中用于复现阈值扫描和训练结果；演示运行不依赖它。
@@ -75,7 +75,7 @@ python playmode_event_loop.py --source-video clips/s01_1050_90.mp4 --server-url 
 预期流程：
 
 1. 左列出现 `suspected`，不带视频。
-2. 客户端导出 90 帧 clip。
+2. 客户端导出 90 帧原始 clip，按 30 FPS 播放，对应约 3 秒。
 3. Qwen3-VL 复核后，同一事件更新为 `fall` 并移动到右列。
 4. 右列显示 clip 预览和 Qwen3-VL 结论。
 5. 工作人员点击 `Mark handled`。
@@ -131,9 +131,9 @@ Validation notes:
 
 Runtime policy:
 
-- `p_fall < 0.30`: normal, no event
-- `0.30 <= p_fall < 0.40`: suspected, send immediate alert, export 90-frame clip, run Qwen3-VL
-- `p_fall >= 0.40`: direct fall alert, skip LLM
+- `p_fall < 0.40`: normal, no event
+- `0.40 <= p_fall < 0.80`: suspected, send immediate alert, export 90-frame clip, sample every 10 frames for Qwen3-VL
+- `p_fall >= 0.80`: direct fall alert, export and release clip, skip LLM
 
 ## Setup
 

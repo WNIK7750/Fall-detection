@@ -378,6 +378,35 @@
       border-radius: 6px;
     }
 
+    .player-controls {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      margin-top: 12px;
+      color: #e5e7eb;
+      font-size: 13px;
+    }
+
+    .progress {
+      height: 10px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #334155;
+    }
+
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: var(--accent);
+    }
+
+    .player-meta {
+      color: #cbd5e1;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
     @media (max-width: 900px) {
       header {
         align-items: flex-start;
@@ -486,6 +515,14 @@
     let events = [];
     let socket = null;
     let reconnectTimer = null;
+    let player = {
+      timer: null,
+      eventId: null,
+      frameIndex: 0,
+      frameCount: 0,
+      fps: 30,
+      playing: false
+    };
 
     function setConnection(online, text) {
       dotEl.className = 'dot ' + (online ? 'online' : 'offline');
@@ -653,26 +690,92 @@
       }
     }
 
-    function openVideo(eventId) {
+    async function openVideo(eventId) {
       const event = events.find((item) => item.event_id === eventId);
       if (!event) return;
-      const streamUrl = event.clip_stream_url;
       const clipUrl = event.clip_url;
-      if (!streamUrl && !clipUrl) return;
+      if (!clipUrl) return;
       modalTitle.textContent = `${event.status || 'event'} · ${event.address || event.event_id}`;
-      if (streamUrl) {
-        modalBody.innerHTML = `<img src="${escapeHtml(streamUrl)}" alt="event video stream">`;
-      } else {
-        modalBody.innerHTML = `<video src="${escapeHtml(clipUrl)}" controls autoplay muted playsinline></video>`;
-      }
+      const response = await fetch(`/api/events/${encodeURIComponent(eventId)}/clip-meta`);
+      const data = await response.json();
+      if (!data.ok) return;
+      const meta = data.meta || {};
+      player = {
+        timer: null,
+        eventId,
+        frameIndex: 0,
+        frameCount: Math.max(1, Number(meta.frame_count || 1)),
+        fps: Math.max(1, Number(meta.fps || 30)),
+        playing: true
+      };
+      modalBody.innerHTML = `
+        <img id="modalFrame" alt="event video frame">
+        <div class="player-controls">
+          <button id="playPauseButton" class="primary">Pause</button>
+          <div class="progress" aria-label="video progress"><div id="progressFill" class="progress-fill"></div></div>
+          <div id="frameCounter">0 / ${player.frameCount}</div>
+        </div>
+        <div class="player-meta">
+          clip ${escapeHtml(meta.start_timestamp_sec ?? 'n/a')}s-${escapeHtml(meta.end_timestamp_sec ?? 'n/a')}s ·
+          frames ${escapeHtml(meta.start_frame ?? 'n/a')}-${escapeHtml(meta.end_frame ?? 'n/a')} ·
+          ${player.frameCount} frames @ ${player.fps.toFixed(1)} fps
+        </div>
+      `;
       videoModal.classList.add('open');
       videoModal.setAttribute('aria-hidden', 'false');
+      document.getElementById('playPauseButton').addEventListener('click', togglePlayer);
+      renderPlayerFrame();
+      startPlayer();
     }
 
     function closeVideo() {
+      stopPlayer();
       videoModal.classList.remove('open');
       videoModal.setAttribute('aria-hidden', 'true');
       modalBody.innerHTML = '';
+    }
+
+    function renderPlayerFrame() {
+      const frame = document.getElementById('modalFrame');
+      const progress = document.getElementById('progressFill');
+      const counter = document.getElementById('frameCounter');
+      if (!frame || !progress || !counter || !player.eventId) return;
+      frame.src = `/api/events/${encodeURIComponent(player.eventId)}/clip-frame/${player.frameIndex}?t=${Date.now()}`;
+      const percent = ((player.frameIndex + 1) / player.frameCount) * 100;
+      progress.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+      counter.textContent = `${player.frameIndex + 1} / ${player.frameCount}`;
+    }
+
+    function stepPlayer() {
+      if (!player.playing) return;
+      player.frameIndex = (player.frameIndex + 1) % player.frameCount;
+      renderPlayerFrame();
+    }
+
+    function startPlayer() {
+      stopPlayer();
+      player.playing = true;
+      player.timer = setInterval(stepPlayer, 1000 / player.fps);
+      const button = document.getElementById('playPauseButton');
+      if (button) button.textContent = 'Pause';
+    }
+
+    function stopPlayer() {
+      if (player.timer) {
+        clearInterval(player.timer);
+        player.timer = null;
+      }
+      player.playing = false;
+      const button = document.getElementById('playPauseButton');
+      if (button) button.textContent = 'Play';
+    }
+
+    function togglePlayer() {
+      if (player.playing) {
+        stopPlayer();
+      } else {
+        startPlayer();
+      }
     }
 
     function connect() {

@@ -225,6 +225,7 @@ def build_event_sequence_from_buffer(
     reviews an already-exported clip and returns a judgment.
     """
     clip_path: str | None = None
+    clip_info = None
     llm_review: dict[str, Any] | None = None
     final_status = status
     output_dir = Path(args.clip_dir)
@@ -255,10 +256,12 @@ def build_event_sequence_from_buffer(
             event_id=event_id,
         )
         initial_payload["video_released"] = False
+        initial_payload["event_timestamp_sec"] = round(frame_index / max(args.fps, 1e-6), 3)
         payloads.append(initial_payload)
         output_path = make_clip_path(scenario, frame_index, status, output_dir)
-        clip_path = clip_buffer.export_latest(output_path, frames=args.event_clip_frames, fps=args.fps)
-        if clip_path is None:
+        clip_info = clip_buffer.export_latest_info(output_path, frames=args.event_clip_frames, fps=args.clip_fps)
+        clip_path = None if clip_info is None else clip_info.path
+        if clip_info is None:
             final_status = "fall"
             llm_review = {
                 "status": "fall",
@@ -272,11 +275,12 @@ def build_event_sequence_from_buffer(
             final_status = "fall" if reviewed_status == "fall" else "suspected"
     elif status == "fall":
         output_path = make_clip_path(scenario, frame_index, status, output_dir)
-        clip_path = clip_buffer.export_latest(
+        clip_info = clip_buffer.export_latest_info(
             output_path,
             frames=min(args.event_clip_frames, len(clip_buffer)),
-            fps=args.fps,
+            fps=args.clip_fps,
         )
+        clip_path = None if clip_info is None else clip_info.path
         llm_review = {
             "status": "skipped_direct_fall",
             "is_fall": True,
@@ -302,6 +306,20 @@ def build_event_sequence_from_buffer(
         event_id=event_id,
     )
     final_payload["video_released"] = final_status == "fall"
+    final_payload["event_timestamp_sec"] = round(frame_index / max(args.fps, 1e-6), 3)
+    if clip_info is not None:
+        final_payload["clip_meta"] = {
+            "frame_count": clip_info.frame_count,
+            "fps": clip_info.fps,
+            "start_frame": clip_info.start_frame,
+            "end_frame": clip_info.end_frame,
+            "start_timestamp_sec": round(clip_info.start_timestamp_sec, 3),
+            "end_timestamp_sec": round(clip_info.end_timestamp_sec, 3),
+            "duration_sec": round(
+                (clip_info.frame_count - 1) / max(clip_info.fps, 1e-6),
+                3,
+            ),
+        }
     payloads.append(final_payload)
     return payloads
 
@@ -324,7 +342,7 @@ def run_client(args: argparse.Namespace) -> None:
     print(
         f"[client] scenarios={scenario_pool} cameras={camera_ids} "
         f"thresholds={args.threshold_low:.2f}/{args.threshold_high:.2f} "
-        f"buffer={args.buffer_frames} export={args.event_clip_frames}"
+        f"buffer={args.buffer_frames} export={args.event_clip_frames}@{args.clip_fps:g}fps"
     )
 
     while True:
@@ -507,20 +525,22 @@ def main() -> None:
     parser.add_argument("--start-frame", type=int, default=0)
     parser.add_argument("--start-near-fall", action="store_true",
                         help="Use data_tuple3.csv to start shortly before a labeled fall segment")
-    parser.add_argument("--pre-roll-frames", type=int, default=180)
+    parser.add_argument("--pre-roll-frames", type=int, default=300)
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--fps", type=float, default=30.0)
+    parser.add_argument("--clip-fps", type=float, default=30.0,
+                        help="Playback FPS for exported evidence clips; detection FPS remains --fps")
     parser.add_argument("--realtime", action="store_true")
     parser.add_argument("--checkpoint", default=str(DEFAULT_3D_CHECKPOINT))
-    parser.add_argument("--threshold-low", type=float, default=0.30)
-    parser.add_argument("--threshold-high", type=float, default=0.40)
+    parser.add_argument("--threshold-low", type=float, default=0.40)
+    parser.add_argument("--threshold-high", type=float, default=0.80)
     parser.add_argument("--quality-threshold", type=float, default=0.45)
     parser.add_argument("--min-temporal-quality", type=float, default=0.15)
     parser.add_argument("--max-centroid-speed", type=float, default=25.0)
     parser.add_argument("--max-speed-multiplier", type=float, default=8.0)
     parser.add_argument("--classify-stride", type=int, default=5)
     parser.add_argument("--max-people", type=int, default=1)
-    parser.add_argument("--buffer-frames", type=int, default=300)
+    parser.add_argument("--buffer-frames", type=int, default=600)
     parser.add_argument("--event-clip-frames", type=int, default=90)
     parser.add_argument("--event-cooldown-frames", type=int, default=300)
     parser.add_argument("--clip-dir", default="clips")
@@ -537,14 +557,14 @@ def main() -> None:
     parser.add_argument("--mmproj", default=str(DEFAULT_MMPROJ))
     parser.add_argument("--n-gpu-layers", type=int, default=-1)
     parser.add_argument("--n-ctx", type=int, default=4096)
-    parser.add_argument("--llm-frame-stride", type=int, default=9)
-    parser.add_argument("--llm-max-frames", type=int, default=10)
+    parser.add_argument("--llm-frame-stride", type=int, default=10)
+    parser.add_argument("--llm-max-frames", type=int, default=9)
     parser.add_argument("--llm-min-confidence", type=float, default=0.60)
     parser.add_argument("--pose-fallback", action="store_true")
     parser.add_argument("--no-send", action="store_true")
     parser.add_argument("--stop-after-event", action="store_true")
     parser.add_argument("--force-trigger-frame", type=int, default=None)
-    parser.add_argument("--force-p-fall", type=float, default=0.35)
+    parser.add_argument("--force-p-fall", type=float, default=0.45)
     parser.add_argument("--log-every", type=int, default=60)
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
