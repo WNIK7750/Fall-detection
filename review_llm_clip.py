@@ -35,6 +35,7 @@ def main():
     parser.add_argument("--mmproj", type=str, default=str(DEFAULT_MMPROJ))
     parser.add_argument("--n-gpu-layers", type=int, default=-1)
     parser.add_argument("--n-ctx", type=int, default=4096)
+    parser.add_argument("--output", default=None, help="Optional JSON output file")
     args = parser.parse_args()
 
     reviewer = LLMFallReviewer(
@@ -52,7 +53,12 @@ def main():
         max_frames=args.max_frames,
         contact_sheet=not args.no_contact_sheet,
     )
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    text = json.dumps(result, ensure_ascii=False, indent=2)
+    print(text)
+    if args.output:
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(text + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # Fall Detection Project — Agent External Memory
 
-> Last updated: 2026-07-12 | Agent: Codex GPT-5
+> Last updated: 2026-07-13 | Agent: Codex GPT-5
 
 ---
 
@@ -81,10 +81,60 @@
 | M7: Demo | ✅ | `demo_multiview.py` (OpenCV viz, quality gating, default checkpoint set) |
 
 ### Remaining
+- Implement the P0 continuous detection client from `Docs/task-queue.md`:
+  privacy-preserving 300-frame in-memory rolling buffer, export only 90-frame
+  suspected-event clips, continuous YOLO/3D/classifier loop, per-person temporal
+  tracking state, suspected/fall trigger policy, and WebSocket event sending.
+- Build the P1 local/LAN community monitoring server and dashboard after P0.
 - Broader VL validation on more exported 90-frame clips.
-- Wire/test final camera/rolling-buffer integration around `review_llm_clip.py`.
-- Prepare demo materials (scenarios, clips, script)
+- Prepare current-dataset demo commands/scenarios; no separate task-queue item
+  for demo materials because the roadshow will use the current dataset directly.
 - Update README with current 3D pipeline and commands
+
+### Current Task Queue Decision (2026-07-13)
+- `Docs/task-queue.md` was rewritten into P0-P3 checklist form.
+- P0 is the continuous detection client, not the dashboard.
+- Privacy boundary: keep about 300 synchronized frames in memory, write no
+  continuous video, and export only the latest 90 frames when suspected review
+  is needed.
+- Trigger policy:
+  - `0.30 <= p_fall < 0.40` -> suspected; export 90-frame clip and call LLM.
+  - If suspected but 90 frames are unavailable, escalate directly to `fall`.
+  - `p_fall >= 0.40` -> direct fall alert without LLM.
+  - `p_fall < 0.30` -> normal.
+- Multi-person tracking should use temporal 3D state to reject unreasonable
+  identity jumps and obvious bad detections before classification/events.
+- P1 is the open local/LAN WebSocket monitoring dashboard. No auth, TLS, WAN,
+  or database for the roadshow.
+
+### P1/P2 Implementation Status (2026-07-13)
+- P1 complete for roadshow validation:
+  - `monitor_server.py` serves the local monitor at `http://127.0.0.1:8765/`.
+  - Detector/demo events are received at `ws://127.0.0.1:8765/ws/events`.
+  - Dashboard clients subscribe at `ws://127.0.0.1:8765/ws/dashboard`.
+  - Generated clips under `clips/` are served at `/clips/...`.
+  - `demo_event_sender.py` sends a sample WebSocket event without running the
+    detector.
+  - Staff can mark events handled from the dashboard or
+    `POST /api/events/{event_id}/handled`.
+- P1 smoke tests passed:
+  - WebSocket event sender received `ack`.
+  - `/api/events` returned the event with `clip_url`.
+  - Dashboard HTML returned HTTP 200.
+  - Handled endpoint set `handled=true`.
+- P2 complete for current roadshow validation:
+  - `review_llm_clip.py` now supports optional `--output`.
+  - `qa_llm_clip_batch.py` batch-tests clips and reuses
+    `LLMFallReviewer.review_video_file()` in real review mode.
+  - Dry-run confirmed `clips/s01_1050_90.mp4` decodes, samples 10 frames with
+    stride 9, and builds a contact sheet.
+  - Real Qwen3-VL-4B review passed on:
+    - `clips/s01_1050_90.mp4`: fall, confidence 0.95.
+    - `clips/s01_0000_90_normal.mp4`: normal, confidence 0.98.
+  - Batch result saved to `results/llm_qa/clip_batch_fall_normal.json`.
+- New dependency note:
+  - `websockets` is required so uvicorn can serve WebSocket routes; it was
+    installed locally and added to `requirements.txt` with FastAPI/uvicorn.
 
 ### Safe from Git (large files)
 - `features/3d/` — generated .npy for training (.gitignore)

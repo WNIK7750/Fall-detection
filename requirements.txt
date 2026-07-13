@@ -19,6 +19,11 @@ tqdm>=4.65.0               # 进度条
 matplotlib>=3.7.0           # 绘图
 seaborn>=0.12.0            # 统计绘图
 
+# 本地路演监控端
+fastapi>=0.110.0            # HTTP + WebSocket server
+uvicorn>=0.29.0             # ASGI runtime
+websockets>=12.0            # WebSocket protocol support for uvicorn/client smoke tests
+
 # Jupyter支持（可选）
 jupyter>=1.0.0
 ipykernel>=6.0.0

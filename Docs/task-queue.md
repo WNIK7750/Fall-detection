@@ -1,113 +1,121 @@
 # Task Queue
 
-Last updated: 2026-07-12
+Last updated: 2026-07-13
 
-## Roadshow Must-Have
+Legend: `( )` pending, `(o)` done.
 
-### 1. Community Monitoring Demo
-- Build a local WebSocket server for multiple client connections.
-- Build a simple dashboard page for community staff.
-- Show incoming fall events with:
-  - client/device ID
-  - address
-  - timestamp
-  - status: `suspected` / `fall`
-  - 3D classifier probability
-  - Qwen3-VL review result
-  - short event video preview
-- Add a demo client that sends a sample event over WebSocket.
-- Keep this local/LAN only for now; no public WAN, auth, or TCP protocol work.
+## P0 - Continuous Detection Client
 
-### 2. Client Event Loop Integration
-- Define the client-side event payload schema.
-- Wire the real detection loop to:
-  - maintain or receive a short rolling event clip from the camera layer
-  - run 3D classifier continuously
-  - trigger on `0.30 <= p_fall < 0.40`
-  - call LLM clip review
-  - send event JSON to the monitoring server
-- Keep camera rolling-buffer/export logic outside the LLM module.
+( ) Define the local event payload schema for client-to-monitor WebSocket events.
 
-### 3. LLM Clip Review Interface
-- Current default is fixed:
-  - upstream exports a 90-frame short clip
-  - `review_llm_clip.py` samples every 9th frame
-  - max 10 sampled frames
-  - sampled frames are packed into one contact-sheet timeline image
-- Smoke-tested command:
-  `python review_llm_clip.py --video clips/s01_1050_90.mp4`
-- Need test on several fall and normal clips before demo.
+( ) Add a privacy-preserving rolling video buffer in the camera/client layer:
+- Keep about 300 recent synchronized frames in memory.
+- Do not write video continuously to disk.
+- Export only the latest 90 frames when a suspected event needs LLM review.
+- If 90 frames are not available at trigger time, escalate directly to `fall`.
 
-### 4. Demo Materials
-- Prepare 2-3 fall clips and 1-2 normal clips.
-- Prepare one scripted roadshow flow:
-  - normal monitoring state
-  - suspected trigger
-  - Qwen3-VL review
-  - community dashboard alert
-  - staff marks event as handled
-- Keep commands short and repeatable.
+( ) Keep three camera streams running continuously through YOLOv8n-pose batch inference.
 
-## Important Polish
+( ) Keep the 3D reconstruction and fall classifier running continuously over tracked people.
 
-### 5. Documentation Cleanup
-- README is still mostly the old 2D project document.
-- Add a concise “Roadshow Demo” section with:
-  - 3D extraction/train/eval commands
-  - current best checkpoint
-  - threshold policy: low `0.30`, high `0.40`
-  - LLM clip review command
-  - community dashboard run command after it exists
-- Keep honesty notes: MCFD calibration and dataset limitations.
+( ) Add per-person temporal state for multi-person tracking:
+- Maintain recent 2D detections, 3D skeletons, feature windows, quality scores, and status.
+- Use prior 3D position and timestamp to reject physically unreasonable identity jumps.
+- Reject obvious unstable detections such as sudden person-to-object switches or skeletons with poor quality.
 
-### 6. Scenario Validation
-- Validate LLM clip review on more than scenario 1.
-- Validate classifier demo behavior on selected MCFD scenarios.
-- Check for chair/background false positives after keeping YOLO strict in demo.
-- Save a short list of recommended scenarios for live presentation.
+( ) Implement suspected/fall trigger policy:
+- `0.30 <= p_fall < 0.40` -> suspected, request clip review.
+- `p_fall >= 0.40` -> direct fall alert.
+- `p_fall < 0.30` -> normal, no event.
+- Add cooldown/deduplication so one fall does not spam repeated alerts.
 
-### 7. Git/Artifact Hygiene
-- Confirm only intended checkpoint archive files are tracked.
-- Keep generated clips under `clips/` and out of Git.
-- Keep LLM weights, MCFD videos, and generated features ignored.
-- Commit current stable state before larger frontend/server work.
+( ) On suspected trigger, pass the trigger timestamp/frame index back to the main loop.
 
-## Optional Enhancements
+( ) Export the 90-frame event clip around the trigger from the rolling buffer.
 
-### 8. Better LLM Evidence
-- Add optional structured evidence to clip review:
-  - `p_fall`
-  - skeleton quality
-  - torso angle
-  - COM height / velocity
-- Keep visual review independent enough that LLM can catch YOLO misses.
+( ) Call the LLM clip-review interface only for suspected events with an available clip.
 
-### 9. Real Camera Adapter
-- Add camera-source abstraction after dashboard works:
-  - file input
-  - webcam index
-  - RTSP URL
-- Keep this behind a narrow interface so demo dataset code remains usable.
+( ) Send the final event JSON over WebSocket:
+- direct classifier fall
+- LLM-confirmed fall
+- unresolved suspected event if the LLM cannot decide or errors
 
-### 10. Performance Tuning
-- Measure YOLO + 3D classifier FPS on target GPU.
-- Measure Qwen3-VL clip review latency with contact sheet defaults.
-- If LLM latency is still high, test fewer sampled frames:
-  - stride 12, max 8
-  - stride 15, max 6
+( ) Add a runnable dataset-backed client command using current MCFD videos.
 
-## Later Productization
+( ) Smoke test the continuous client without LLM using a current scenario.
 
-### 11. Security and Deployment
-- Authentication for clients and staff dashboard.
-- TLS/WSS.
-- Event persistence database.
-- File upload endpoint instead of local shared paths.
-- Retention policy for short clips.
+( ) Smoke test the continuous client with LLM on at least one suspected/fall clip.
 
-### 12. Reliability
-- Client reconnect/backoff.
-- Server-side heartbeats.
-- Offline queue for events.
-- Duplicate event suppression.
-- Event state machine and audit log.
+## P1 - Community Monitoring Demo
+
+(o) Build a local/LAN WebSocket monitoring server.
+
+(o) Build a simple dashboard page for community staff.
+
+(o) Show incoming events with:
+- client/device ID
+- address
+- timestamp
+- status: `suspected` / `fall`
+- 3D classifier probability
+- Qwen3-VL review result
+- short event video preview
+
+(o) Add a staff action to mark an event as handled.
+
+(o) Add a demo sender that can send a sample event without running the detector.
+
+(o) Serve generated event clips locally so the dashboard can preview them.
+
+(o) Keep the server open/local only for roadshow use: no auth, TLS, WAN deployment, or database.
+
+(o) Smoke test dashboard event receive, video preview, and handled state.
+
+## P2 - LLM Clip Review Interface
+
+(o) Keep the clip-review boundary fixed: upstream exports a short clip, LLM module only reviews that clip.
+
+(o) Use the current default review policy:
+- upstream exports 90 frames
+- `review_llm_clip.py` samples every 9th frame
+- max 10 sampled frames
+- sampled frames are packed into one contact-sheet timeline image
+
+(o) Preserve the smoke-tested command:
+`python review_llm_clip.py --video clips/s01_1050_90.mp4`
+
+(o) Reuse `LLMFallReviewer.review_video_file()` from the continuous event client.
+
+(o) Test clip review on several current-dataset fall and normal clips.
+
+(o) Record recommended scenarios and commands for the roadshow.
+
+## P3 - Polish And Documentation
+
+( ) Update `README.md` with a concise Roadshow Demo section:
+- 3D extraction/train/eval commands
+- current best checkpoint
+- threshold policy: low `0.30`, high `0.40`
+- LLM clip review command
+- community dashboard run command
+- continuous client run command
+
+( ) Update honesty notes:
+- MCFD calibration is demo/synthetic or dataset-derived approximation.
+- Current demo uses local dataset videos, not real deployed cameras.
+- No encryption/login/database in the roadshow monitoring interface.
+- Event clips are exported only on trigger for privacy.
+
+( ) Update `Docs/Chat.md` after implementation milestones.
+
+( ) Confirm generated clips remain ignored by Git.
+
+( ) Confirm LLM weights, MCFD videos, and generated features remain ignored by Git.
+
+( ) Run a final end-to-end roadshow rehearsal:
+- normal monitoring state
+- suspected trigger
+- 90-frame clip export
+- Qwen3-VL review
+- WebSocket dashboard alert
+- staff marks event as handled

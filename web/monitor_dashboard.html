@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Community Fall Monitor</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #667085;
+      --line: #d9e0ea;
+      --fall: #c2410c;
+      --suspected: #a16207;
+      --normal: #047857;
+      --handled: #475569;
+      --accent: #2563eb;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 24px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #94a3b8;
+    }
+
+    .dot.online { background: var(--normal); }
+    .dot.offline { background: #dc2626; }
+
+    main {
+      width: min(1320px, 100%);
+      margin: 0 auto;
+      padding: 20px 24px 28px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .metric .value {
+      font-size: 26px;
+      font-weight: 700;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .toolbar h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 8px 11px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:hover { border-color: var(--accent); }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .events {
+      display: grid;
+      gap: 12px;
+    }
+
+    .event {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 180px;
+      gap: 16px;
+      align-items: stretch;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-left: 6px solid var(--suspected);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .event.fall { border-left-color: var(--fall); }
+    .event.handled {
+      opacity: 0.68;
+      border-left-color: var(--handled);
+    }
+
+    video, .empty-video {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #111827;
+      border-radius: 6px;
+      object-fit: contain;
+      display: block;
+    }
+
+    .empty-video {
+      display: grid;
+      place-items: center;
+      color: #cbd5e1;
+      font-size: 13px;
+    }
+
+    .event-main {
+      min-width: 0;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #ffffff;
+      background: var(--suspected);
+      text-transform: uppercase;
+    }
+
+    .badge.fall { background: var(--fall); }
+    .badge.handled { background: var(--handled); }
+
+    .event-title {
+      font-size: 17px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px 14px;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+
+    .grid strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .reason {
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .event-actions {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+      border-left: 1px solid var(--line);
+      padding-left: 14px;
+    }
+
+    .probability {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .probability strong {
+      display: block;
+      color: var(--text);
+      font-size: 26px;
+      margin-top: 2px;
+    }
+
+    .empty {
+      padding: 32px;
+      background: var(--panel);
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      main { padding: 16px; }
+
+      .summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .event {
+        grid-template-columns: 1fr;
+      }
+
+      .event-actions {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+        padding-left: 0;
+        padding-top: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Community Fall Monitor</h1>
+    <div class="connection"><span id="dot" class="dot"></span><span id="connectionText">Connecting</span></div>
+  </header>
+
+  <main>
+    <section class="summary">
+      <div class="metric"><div class="label">Total Events</div><div id="totalCount" class="value">0</div></div>
+      <div class="metric"><div class="label">Open Alerts</div><div id="openCount" class="value">0</div></div>
+      <div class="metric"><div class="label">Fall</div><div id="fallCount" class="value">0</div></div>
+      <div class="metric"><div class="label">Suspected</div><div id="suspectedCount" class="value">0</div></div>
+    </section>
+
+    <div class="toolbar">
+      <h2>Incoming Events</h2>
+      <button id="reloadButton">Reload</button>
+    </div>
+
+    <section id="events" class="events">
+      <div class="empty">No events yet. Start the monitor server and run the demo sender or detector client.</div>
+    </section>
+  </main>
+
+  <script>
+    const eventsEl = document.getElementById('events');
+    const dotEl = document.getElementById('dot');
+    const connectionTextEl = document.getElementById('connectionText');
+    const reloadButton = document.getElementById('reloadButton');
+    const counts = {
+      total: document.getElementById('totalCount'),
+      open: document.getElementById('openCount'),
+      fall: document.getElementById('fallCount'),
+      suspected: document.getElementById('suspectedCount')
+    };
+
+    let events = [];
+    let socket = null;
+    let reconnectTimer = null;
+
+    function setConnection(online, text) {
+      dotEl.className = 'dot ' + (online ? 'online' : 'offline');
+      connectionTextEl.textContent = text;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[ch]));
+    }
+
+    function formatProb(value) {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) return 'n/a';
+      return Number(value).toFixed(3);
+    }
+
+    function upsertEvent(event) {
+      const index = events.findIndex((item) => item.event_id === event.event_id);
+      if (index >= 0) {
+        events[index] = event;
+      } else {
+        events.unshift(event);
+      }
+      render();
+    }
+
+    function render() {
+      const openEvents = events.filter((event) => !event.handled);
+      counts.total.textContent = events.length;
+      counts.open.textContent = openEvents.length;
+      counts.fall.textContent = events.filter((event) => event.status === 'fall').length;
+      counts.suspected.textContent = events.filter((event) => event.status === 'suspected').length;
+
+      if (!events.length) {
+        eventsEl.innerHTML = '<div class="empty">No events yet. Start the monitor server and run the demo sender or detector client.</div>';
+        return;
+      }
+
+      eventsEl.innerHTML = events.map((event) => {
+        const status = event.status || 'suspected';
+        const llm = event.llm_review || {};
+        const classifier = event.classifier || {};
+        const handled = event.handled ? ' handled' : '';
+        const clip = event.clip_url
+          ? `<video src="${escapeHtml(event.clip_url)}" controls muted preload="metadata"></video>`
+          : '<div class="empty-video">No clip</div>';
+        const handledBadge = event.handled ? '<span class="badge handled">Handled</span>' : '';
+        const markButton = event.handled
+          ? '<button disabled>Handled</button>'
+          : `<button class="primary" data-handle="${escapeHtml(event.event_id)}">Mark handled</button>`;
+
+        return `
+          <article class="event ${escapeHtml(status)}${handled}">
+            <div>${clip}</div>
+            <div class="event-main">
+              <div class="row">
+                <span class="badge ${escapeHtml(status)}">${escapeHtml(status)}</span>
+                ${handledBadge}
+                <span class="event-title">${escapeHtml(event.address)}</span>
+              </div>
+              <div class="grid">
+                <div>Client <strong>${escapeHtml(event.client_id)}</strong></div>
+                <div>Device <strong>${escapeHtml(event.device_id)}</strong></div>
+                <div>Time <strong>${escapeHtml(event.timestamp)}</strong></div>
+                <div>Event <strong>${escapeHtml(event.event_id)}</strong></div>
+                <div>Scenario <strong>${escapeHtml(event.scenario ?? 'n/a')}</strong></div>
+                <div>Frame <strong>${escapeHtml(event.frame_index ?? 'n/a')}</strong></div>
+              </div>
+              <div class="reason"><strong>Qwen3-VL:</strong> ${escapeHtml(llm.status ?? 'n/a')} (${formatProb(llm.confidence)}) - ${escapeHtml(llm.reason ?? '')}</div>
+            </div>
+            <div class="event-actions">
+              <div class="probability">3D classifier p_fall <strong>${formatProb(classifier.p_fall)}</strong></div>
+              ${markButton}
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    async function reloadEvents() {
+      const response = await fetch('/api/events');
+      const data = await response.json();
+      events = data.events || [];
+      render();
+    }
+
+    async function markHandled(eventId) {
+      await fetch(`/api/events/${encodeURIComponent(eventId)}/handled`, { method: 'POST' });
+    }
+
+    function connect() {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+      socket = new WebSocket(`${scheme}://${location.host}/ws/dashboard`);
+      socket.onopen = () => setConnection(true, 'Connected');
+      socket.onclose = () => {
+        setConnection(false, 'Disconnected, retrying');
+        reconnectTimer = setTimeout(connect, 1200);
+      };
+      socket.onerror = () => setConnection(false, 'Connection error');
+      socket.onmessage = (message) => {
+        const data = JSON.parse(message.data);
+        if (data.type === 'snapshot') {
+          events = data.events || [];
+          render();
+        } else if (data.type === 'event') {
+          upsertEvent(data.event);
+        } else if (data.type === 'handled') {
+          upsertEvent(data.event);
+        }
+      };
+    }
+
+    eventsEl.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-handle]');
+      if (button) markHandled(button.dataset.handle);
+    });
+
+    reloadButton.addEventListener('click', reloadEvents);
+    reloadEvents().catch(() => {});
+    connect();
+  </script>
+</body>
+</html>
