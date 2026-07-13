@@ -222,10 +222,10 @@ def llm_error_result(reason: str) -> dict[str, Any]:
 
 def print_llm_token_budget(reviewer: LLMFallReviewer, view_labels: list[str]) -> None:
     _ = view_labels
-    print("[llm-tokens] text-only tokenizer counts; each contact sheet ~144 image tokens")
+    print("[llm-tokens] text-only tokenizer counts; each contact sheet ~432 image tokens (256px tiles)")
     direct_count = reviewer.count_text_tokens(f"{SYSTEM_PROMPT}\n{MULTIVIEW_CONTACT_SHEET_PROMPT}", add_bos=False)
     print(f"[llm-tokens] direct_multiview_text={direct_count}")
-    print(f"[llm-tokens] est_total_with_3x144_image_tokens={direct_count + 144 * 3 if direct_count is not None else None}")
+    print(f"[llm-tokens] est_total_with_9x432_image_tokens={direct_count + 432 * 9 if direct_count is not None else None}")
 
 
 def review_clip(reviewer: LLMFallReviewer | None, clip_path: str, args: argparse.Namespace) -> dict[str, Any]:
@@ -273,11 +273,14 @@ def review_event_evidence(
             "reason": "LLM review disabled; event remains suspected.",
         }
     if view_sequences:
-        sheets = [
-            make_contact_sheet(frames, columns=3, tile_width=256, label_prefix=f"{label}_t")
-            for label, frames in zip(view_labels, view_sequences)
-            if frames
-        ]
+        sheets = []
+        for label, frames in zip(view_labels, view_sequences):
+            if not frames:
+                continue
+            step = max(1, len(frames) // 3)
+            for g in range(3):
+                group = frames[g * step:(g + 1) * step]
+                sheets.append(make_contact_sheet(group, columns=3, tile_width=256, label_prefix=f"{label}_g{g}"))
         result = reviewer.review_multiview_contact_sheets(sheets, video_path=clip_path)
     else:
         result = reviewer.review_video_file(
@@ -1166,9 +1169,9 @@ def main() -> None:
     parser.add_argument("--llm-sheet-stride", type=int, default=29)
     parser.add_argument("--llm-sheet-tile-width", type=int, default=192,
                         help="Deprecated; kept for old contact-sheet experiments")
-    parser.add_argument("--llm-pre-samples", type=int, default=4,
+    parser.add_argument("--llm-pre-samples", type=int, default=13,
                         help="Single-view LLM samples before the classifier-window center")
-    parser.add_argument("--llm-post-samples", type=int, default=4,
+    parser.add_argument("--llm-post-samples", type=int, default=13,
                         help="Single-view LLM samples after the classifier-window center")
     parser.add_argument("--llm-temporal-stride", type=int, default=5,
                         help="Frame stride between single-view LLM samples")

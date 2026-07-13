@@ -139,7 +139,7 @@ Runtime policy:
 - LLM says fall: update the same `event_id` to `fall` and release the clip
 - Events are initially emitted only after the rolling buffer has at least 90 pre-trigger frames. LLM review and video release happen only after the full 241-frame evidence clip is available.
 - Event suppression is episode-based per track. While an event is pending, stronger triggers within 180 frames update the same `event_id` and move its evidence window instead of creating another dashboard card. After the episode trigger, new events for that track are suppressed for 300 frames, while YOLO, 3D reconstruction, smoothing, and rolling feature buffers continue running.
-- Qwen3-VL review sends three camera contact sheets in a single call for direct multi-view judgment. It samples 9 frames per camera around the center of the most suspicious 40-frame classifier window: 4 before, the center frame, and 4 after, packed into one 3x3 contact sheet per camera.
+- Qwen3-VL review sends 9 contact sheets in a single call (3 per camera, 27 frames total per camera at 5-frame stride) for direct multi-view judgment. Each contact sheet is a 3x3 grid of sampled frames.
 - Default LLM stability settings for 8GB GPUs: `--n-gpu-layers 20`, `--n-ctx 8192`, `--n-batch 2048`, `--n-ubatch 64`, `--llm-image-max-side 0`.
 
 Classifier window policy:

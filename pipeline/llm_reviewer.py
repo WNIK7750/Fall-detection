@@ -85,10 +85,10 @@ Example output:
 
 MULTIVIEW_CONTACT_SHEET_PROMPT = """You are an AI safety reviewer for an elderly fall detection system.
 
-You will be shown three contact-sheet images from synchronized surveillance
-cameras. Each contact sheet contains 9 ordered frames sampled from an 8-second
-window, arranged left-to-right, top-to-bottom as a timeline. Look at all three
-views together and observe the person's posture changes across the timeline.
+You will be shown 9 contact-sheet images from 3 synchronized surveillance
+cameras (3 sheets per camera). Each contact sheet is a 3x3 grid of 9 ordered
+frames arranged left-to-right, top-to-bottom as a timeline. Across the 3 sheets
+per camera, observe the person's full movement trajectory.
 
 Judge whether the person transitions into a fall-risk / collapsed posture, or
 remains clearly in normal daily activity. Prefer safety: if one or more clear
@@ -190,6 +190,31 @@ System evidence from YOLO + 3D reconstruction:
 """
 
 SYSTEM_PROMPT = "You are a computer vision safety reviewer. Always respond with valid JSON only."
+
+RETRY_FORMAT_PROMPT_1 = """Your previous response could not be parsed or did not contain a clear fall judgment.
+You MUST output ONLY a single JSON object — no markdown, no explanation, no other text.
+The JSON must have exactly these three fields:
+- "is_fall": true or false
+- "confidence": a number from 0.0 to 1.0
+- "reason": a brief 1-2 sentence explanation
+
+Based on your previous analysis below, extract the final judgment:
+
+{previous_output}
+"""
+
+RETRY_FORMAT_PROMPT_2 = """Two attempts have failed to produce a valid JSON response.
+This is your last chance. Using the two analyses below, output EXACTLY one JSON object:
+{{"is_fall": true/false, "confidence": 0.0-1.0, "reason": "summary"}}
+If the evidence is unclear, default to "is_fall": true for safety.
+NO markdown. NO extra text. ONLY the JSON object.
+
+First analysis:
+{output_1}
+
+Second analysis:
+{output_2}
+"""
 
 
 def make_multiview_collage(
@@ -405,8 +430,17 @@ class LLMFallReviewer:
         result["contact_sheet"] = contact_sheet
         return result
 
+    def _is_valid_fall_result(self, result: dict) -> bool:
+        """Check whether the parsed result contains a clear fall judgment."""
+        if result.get("is_fall") is None:
+            return False
+        reason = str(result.get("reason", "")).strip()
+        if not reason or reason.startswith("ERROR:"):
+            return False
+        return True
+
     def review_multiview_contact_sheets(self, sheets: list[np.ndarray], video_path: str | None = None) -> dict:
-        """Review one 9-frame contact sheet per camera view."""
+        """Review contact sheets with up to 3 retries on parse/format failure."""
         result = self.review(
             sheets,
             prompt_text=MULTIVIEW_CONTACT_SHEET_PROMPT,
@@ -417,7 +451,52 @@ class LLMFallReviewer:
         result["contact_sheet"] = True
         result["views"] = len(sheets)
         result["review_mode"] = "direct_multiview_contact_sheets"
-        return result
+        result["retry_count"] = 0
+
+        if self._is_valid_fall_result(result):
+            return result
+
+        # --- Retry 1: format enforcement, text-only (no images) ---
+        raw_1 = result.get("raw_response", "")
+        retry_1 = self.complete_text_json(
+            RETRY_FORMAT_PROMPT_1.format(previous_output=raw_1),
+            max_tokens=192,
+        )
+        retry_1["raw_response"] = retry_1.get("raw_response", "")
+        if self._is_valid_fall_result(retry_1):
+            retry_1["retry_count"] = 1
+            retry_1["review_mode"] = "direct_multiview_retry_1"
+            if video_path is not None:
+                retry_1["video_path"] = video_path
+            retry_1["views"] = len(sheets)
+            return retry_1
+
+        # --- Retry 2: final forced format, use both previous outputs ---
+        raw_2 = retry_1.get("raw_response", "")
+        retry_2 = self.complete_text_json(
+            RETRY_FORMAT_PROMPT_2.format(output_1=raw_1, output_2=raw_2),
+            max_tokens=192,
+        )
+        retry_2["raw_response"] = retry_2.get("raw_response", "")
+        if self._is_valid_fall_result(retry_2):
+            retry_2["retry_count"] = 2
+            retry_2["review_mode"] = "direct_multiview_retry_2"
+            if video_path is not None:
+                retry_2["video_path"] = video_path
+            retry_2["views"] = len(sheets)
+            return retry_2
+
+        # --- All 3 attempts failed: escalate to fall ---
+        return {
+            "is_fall": True,
+            "confidence": 0.5,
+            "reason": "All 3 LLM attempts failed to produce a valid response; escalated to fall by policy.",
+            "raw_response": f"RAW_1: {raw_1[:500]}\n---\nRAW_2: {raw_2[:500]}",
+            "retry_count": 3,
+            "review_mode": "direct_multiview_fallback",
+            "views": len(sheets),
+            "video_path": video_path,
+        }
 
     def describe_single_view_sequence(self, frames: list[np.ndarray], view_label: str) -> dict:
         """Describe one camera's 9 ordered frames without making the final decision."""
