@@ -15,6 +15,7 @@ class BufferedFrame:
     frame_index: int
     timestamp_sec: float
     image: np.ndarray
+    views: list[np.ndarray] | None = None
 
 
 @dataclass
@@ -41,10 +42,17 @@ class RollingClipBuffer:
         self.fps = fps
         self._frames: deque[BufferedFrame] = deque(maxlen=max_frames)
 
-    def append(self, frame_index: int, image: np.ndarray, timestamp_sec: float | None = None) -> None:
+    def append(
+        self,
+        frame_index: int,
+        image: np.ndarray,
+        timestamp_sec: float | None = None,
+        views: list[np.ndarray] | None = None,
+    ) -> None:
         if timestamp_sec is None:
             timestamp_sec = frame_index / max(self.fps, 1e-6)
-        self._frames.append(BufferedFrame(frame_index, timestamp_sec, image.copy()))
+        copied_views = None if views is None else [view.copy() for view in views]
+        self._frames.append(BufferedFrame(frame_index, timestamp_sec, image.copy(), copied_views))
 
     def __len__(self) -> int:
         return len(self._frames)
@@ -56,6 +64,13 @@ class RollingClipBuffer:
         if frames <= 0:
             return []
         return list(self._frames)[-frames:]
+
+    def range_by_frame(self, start_frame: int, end_frame: int) -> list[BufferedFrame]:
+        """Return buffered frames in inclusive [start_frame, end_frame]."""
+        return [
+            item for item in self._frames
+            if start_frame <= item.frame_index <= end_frame
+        ]
 
     def export_latest_info(
         self,
@@ -96,6 +111,20 @@ class RollingClipBuffer:
             end_timestamp_sec=float(selected[-1].timestamp_sec),
         )
 
+    def export_range_info(
+        self,
+        output_path: str | Path,
+        start_frame: int,
+        end_frame: int,
+        fps: float | None = None,
+    ) -> ClipExportInfo | None:
+        """Export buffered frames by inclusive frame range."""
+        selected = self.range_by_frame(start_frame, end_frame)
+        expected = end_frame - start_frame + 1
+        if len(selected) < expected:
+            return None
+        return _export_selected(output_path, selected, fps or self.fps)
+
     def export_latest(self, output_path: str | Path, frames: int = 90, fps: float | None = None) -> str | None:
         """Export latest N frames to a clip. Returns path or None if unavailable."""
         info = self.export_latest_info(output_path, frames=frames, fps=fps)
@@ -103,10 +132,13 @@ class RollingClipBuffer:
 
 
 def _open_video_writer(output: Path, fps: float, size: tuple[int, int]) -> cv2.VideoWriter:
-    """Open a browser-friendly writer where available, then fall back to mp4v."""
+    """Open a stable event-clip writer.
+
+    The dashboard decodes clips server-side into cached JPEG frames, so these
+    mp4 files do not need browser-native H264. Avoid probing H264/OpenH264 here
+    because missing OpenH264 DLLs produce noisy errors on Windows.
+    """
     candidates = [
-        ("avc1", output),
-        ("H264", output),
         ("mp4v", output),
     ]
     for fourcc_name, path in candidates:
@@ -115,3 +147,36 @@ def _open_video_writer(output: Path, fps: float, size: tuple[int, int]) -> cv2.V
             return writer
         writer.release()
     raise RuntimeError(f"Cannot open output video: {output}")
+
+
+def _export_selected(
+    output_path: str | Path,
+    selected: list[BufferedFrame],
+    fps: float,
+) -> ClipExportInfo | None:
+    if not selected:
+        return None
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    h, w = selected[0].image.shape[:2]
+    writer = _open_video_writer(output, fps, (w, h))
+    try:
+        for item in selected:
+            frame = item.image
+            if frame.shape[:2] != (h, w):
+                frame = cv2.resize(frame, (w, h), interpolation=cv2.INTER_AREA)
+            writer.write(frame)
+    finally:
+        writer.release()
+
+    return ClipExportInfo(
+        path=str(output),
+        frame_count=len(selected),
+        fps=float(fps),
+        start_frame=int(selected[0].frame_index),
+        end_frame=int(selected[-1].frame_index),
+        start_timestamp_sec=float(selected[0].timestamp_sec),
+        end_timestamp_sec=float(selected[-1].timestamp_sec),
+    )

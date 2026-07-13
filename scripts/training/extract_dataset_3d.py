@@ -33,6 +33,7 @@ NORM_SUBSAMPLE = 3     # sparser for normal segments
 NORM_STRIDE = 5
 WINDOW_SIZE = 20
 FALL_CONTEXT = 200     # frames before/after fall segment to include
+MAX_HARD_NORMAL_PER_SCENARIO = 80
 TIME_BATCH_SIZE = 64   # timesteps per YOLO call before flattening views
 
 SPLIT_PRESETS = {
@@ -72,13 +73,19 @@ def label_windows(
     fall_segments: list[tuple[int, int]],
     subsample: int = FALL_SUBSAMPLE,
 ) -> np.ndarray:
-    """Label windows: 1 if any overlap with a fall segment."""
+    """Label windows by temporal center.
+
+    MCFD fall annotations are short (~30 frames). The old any-overlap rule
+    marked pre/post context as fall if a 40-frame window touched the segment by
+    a single frame. For correctness, a positive window must be centered inside
+    an annotated fall interval.
+    """
     y = np.zeros(len(X), dtype=np.int64)
     win_span = WINDOW_SIZE * subsample  # original frames covered by one window
     for i, start in enumerate(frame_starts):
-        end = start + win_span
+        center = start + win_span // 2
         for fs_start, fs_end in fall_segments:
-            if not (end < fs_start or start > fs_end):
+            if fs_start <= center <= fs_end:
                 y[i] = 1
                 break
     return y
@@ -241,12 +248,26 @@ def main():
                     time_batch_size=args.time_batch,
                     min_quality=args.min_quality,
                 )
-                # Only keep fall-labeled windows — context frames are NOT normal
+                # Keep centered fall windows plus a capped set of hard negatives
+                # from near-fall context. This reduces pre/post-fall false positives.
                 if len(Xf) > 0:
                     fall_mask = yf == 1
                     if fall_mask.sum() > 0:
                         X_scenario.append(Xf[fall_mask])
                         y_scenario.append(yf[fall_mask])
+                    hard_norm_mask = ~fall_mask
+                    hard_norm_count = int(hard_norm_mask.sum())
+                    if hard_norm_count > 0:
+                        hard_indices = np.flatnonzero(hard_norm_mask)
+                        max_hard = min(MAX_HARD_NORMAL_PER_SCENARIO, len(hard_indices))
+                        if len(hard_indices) > max_hard:
+                            hard_indices = np.random.RandomState(4200 + s).choice(
+                                hard_indices,
+                                max_hard,
+                                replace=False,
+                            )
+                        X_scenario.append(Xf[hard_indices])
+                        y_scenario.append(yf[hard_indices])
 
                 # --- Normal area: sparse windowing, avoid fall region ---
                 if not args.fast:

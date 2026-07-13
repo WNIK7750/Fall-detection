@@ -7,9 +7,9 @@
 - 三路 MCFD 视频输入模拟摄像头：`cam1/cam4/cam7`
 - YOLOv8n-pose 批量姿态检测
 - 多视角三角测量生成 3D 骨架
-- 10 维 3D 特征 + BiLSTM/BiGRU/Attention 分类器
+- 10 维 3D 特征 + BiLSTM/BiGRU/Attention 时序分类器
 - 三级策略：`normal` / `suspected` / `fall`
-- `suspected` 事件自动导出最近 90 帧原始 clip，并抽帧调用 Qwen3-VL
+- `suspected` 事件先等待触发后 151 帧，导出 241 帧/8 秒证据 clip，并用三视图九宫格调用 Qwen3-VL
 - 本地/LAN WebSocket dashboard 展示 `suspected` 与 `fall` 两列事件
 - 无摄像头 playmode 可稳定演示完整主循环
 
@@ -21,7 +21,7 @@
 
 - 客户端只在 `suspected` 或 `fall` 时发送事件。
 - `suspected` 第一时间只发送不含视频的告警和 3D classifier probability。
-- 只有需要复核时才从内存 rolling buffer 导出最近 90 帧短片段；rolling buffer 默认保留 600 帧，约 20 秒。
+- 只有需要复核时才从内存 rolling buffer 导出事件证据。当前证据窗口是触发帧前/含触发 90 帧，加触发后 151 帧，共 241 帧；按现实 30 FPS 播放为 8 秒。MCFD 源 AVI 虽报告 120 FPS，本项目按现实速度 30 FPS 处理。
 - LLM 复核完成后，用同一个 `event_id` 更新事件状态。
 - 数据集视频、LLM GGUF 权重、生成 clips 不进入 Git。
 - 当前 `features/3d/` 体积很小，保留在 Git 中用于复现阈值扫描和训练结果；演示运行不依赖它。
@@ -75,7 +75,7 @@ python playmode_event_loop.py --source-video clips/s01_1050_90.mp4 --server-url 
 预期流程：
 
 1. 左列出现 `suspected`，不带视频。
-2. 客户端导出 90 帧原始 clip，按 30 FPS 播放，对应约 3 秒。
+2. 客户端导出 241 帧原始 clip，按现实 30 FPS 播放，对应 8 秒。
 3. Qwen3-VL 复核后，同一事件更新为 `fall` 并移动到右列。
 4. 右列显示 clip 预览和 Qwen3-VL 结论。
 5. 工作人员点击 `Mark handled`。
@@ -103,7 +103,7 @@ python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-
 Dashboard event policy:
 
 - `fall`: immediately exports a clip and shows it in the Fall column.
-- `suspected`: first sends an alert without video, then exports a clip for local Qwen3-VL review.
+- `suspected`: first sends an alert without video, then waits for post-event context, exports an 8-second clip, and sends three 3x3 contact sheets (one per camera view) to local Qwen3-VL review.
 - LLM says fall: same `event_id` is updated to `fall`; the old suspected card disappears and the Fall card shows video.
 - LLM says not fall: same event stays in the Suspected column as manual review. Staff can click `Request video`; after 30 seconds the video preview is released for human review.
 - Dashboard playback does not stream one frame per request. Released clips are loaded through one `/clip-frames` request into the browser, then played locally with a play/pause button and progress bar.
@@ -133,9 +133,17 @@ Validation notes:
 Runtime policy:
 
 - `p_fall < 0.40`: normal, no event
-- `p_fall >= 0.40`: suspected, send immediate alert, export 90-frame clip, sample every 10 frames for Qwen3-VL
+- `p_fall >= 0.40`: suspected, send immediate alert without video, collect 151 post-trigger frames, export a 241-frame/8-second clip, and sample 9 frames per camera view with stride 29 for Qwen3-VL
 - LLM says fall: update the same `event_id` to `fall` and release the clip
-- Events are emitted only after the rolling buffer has at least 90 frames, so released fall alerts have a complete 3-second evidence clip.
+- Events are initially emitted only after the rolling buffer has at least 90 pre-trigger frames. LLM review and video release happen only after the full 241-frame evidence clip is available.
+
+Planned classifier window update:
+
+- Training and realtime inference should use 40 consecutive 3D feature frames as one sample/window.
+- A fall training sample is valid only when its 40-frame reference-time window contains at least 25 consecutive fall-labeled frames.
+- A normal training sample must contain 0 fall-labeled frames and should keep a safety gap from nearby fall intervals.
+- Multi-camera extraction uses cam1 as the reference timeline. `MCFDReader` applies CSV-derived camera offsets so cam4/cam7 are read in sync with the cam1 reference frame.
+- This update changes the training data distribution, so features and the 3D checkpoint must be regenerated before using the new window policy in the roadshow path.
 
 ## Setup
 
@@ -144,6 +152,18 @@ Python 3.10+ recommended. The current dev machine uses Python 3.13 with CUDA PyT
 ```bash
 pip install -r requirements.txt
 ```
+
+For Qwen3-VL roadshow review on NVIDIA GPU, reinstall `llama-cpp-python` with CUDA support after the base requirements:
+
+```powershell
+pip uninstall -y llama-cpp-python
+$env:CMAKE_ARGS="-DGGML_CUDA=on"
+$env:FORCE_CMAKE="1"
+pip install --no-cache-dir --force-reinstall llama-cpp-python
+python -c "import llama_cpp; print(llama_cpp.llama_supports_gpu_offload())"
+```
+
+The verification command must print `True`; otherwise Qwen3-VL will run on CPU.
 
 Important local artifacts not stored in Git:
 
@@ -182,6 +202,8 @@ Extract 3D dataset features:
 python scripts/training/extract_dataset_3d.py --device cuda --yolo-batch 32 --time-batch 64 --min-quality 0.15 --max-normal 300
 ```
 
+The next extraction pass should generate 40-frame samples explicitly from legal candidate windows: fall windows must include at least 25 consecutive fall frames, while normal windows must include no fall frames.
+
 Train 3D classifier:
 
 ```bash
@@ -191,7 +213,8 @@ python scripts/training/train_3d.py --seed 42 --no-smote
 Sweep thresholds:
 
 ```bash
-python scripts/training/sweep_threshold.py --split test --device cuda
+python scripts/training/sweep_threshold.py --checkpoint checkpoints/<new_run>/best_model.pth --split test --device cuda
+python continuous_event_client.py --checkpoint checkpoints/<new_run>/best_model.pth --scenario 3 --start-frame 303 --max-frames 520 --no-send --no-llm --stop-after-event
 ```
 
 OpenCV multiview visual demo:

@@ -32,10 +32,12 @@ try:
     from llama_cpp import Llama
     from llama_cpp.llama_chat_format import Qwen25VLChatHandler
     HAS_LLAMA = True
-except ImportError:
+    LLAMA_IMPORT_ERROR = None
+except Exception as exc:
     HAS_LLAMA = False
     Llama = None
     Qwen25VLChatHandler = None
+    LLAMA_IMPORT_ERROR = exc
 
 
 RAW_FALL_REVIEW_PROMPT = """You are an AI safety reviewer for an elderly fall detection system.
@@ -78,6 +80,28 @@ IMPORTANT: Only output the JSON object, nothing else. Do not add any other text.
 
 Example output:
 {{"is_fall": true, "confidence": 0.92, "reason": "The sequence shows the person moving from upright posture to lying on the floor."}}
+"""
+
+
+MULTIVIEW_CONTACT_SHEET_PROMPT = """You are an AI safety reviewer for an elderly fall detection system.
+
+You will be shown three contact-sheet images from synchronized surveillance
+cameras. Each image is one camera view. Each contact sheet contains 9 ordered
+frames sampled from the same 8-second event window, arranged left to right and
+top to bottom. Use all views together and focus on the temporal progression.
+
+Decide whether the person transitions into a fall-risk / abnormal collapsed
+posture, or remains clearly normal.
+
+Output your judgment as a JSON object with exactly these fields:
+- "is_fall": true or false
+- "confidence": a number from 0.0 to 1.0 indicating your certainty
+- "reason": a brief explanation in English, 1-2 sentences
+
+IMPORTANT: Only output the JSON object, nothing else. Do not add any other text.
+
+Example output:
+{{"is_fall": true, "confidence": 0.92, "reason": "Across the views, the person transitions from upright to lying on the mat."}}
 """
 
 
@@ -170,12 +194,20 @@ class LLMFallReviewer:
         self.ready = False
 
         if not HAS_LLAMA:
-            print("[LLMFallReviewer] llama-cpp-python not installed. Run: pip install llama-cpp-python")
+            print(
+                "[LLMFallReviewer] llama-cpp-python is unavailable. "
+                f"Import error: {LLAMA_IMPORT_ERROR}"
+            )
             return
 
         try:
             if Qwen25VLChatHandler is None:
                 raise RuntimeError("Qwen VL chat handler is unavailable in llama-cpp-python")
+            if hasattr(llama_cpp, "llama_supports_gpu_offload") and not llama_cpp.llama_supports_gpu_offload():
+                print(
+                    "[LLMFallReviewer] WARNING: llama-cpp-python was built without GPU offload; "
+                    "Qwen3-VL will run on CPU even when n_gpu_layers is set."
+                )
             chat_handler = Qwen25VLChatHandler(
                 clip_model_path=mmproj_path,
                 verbose=verbose,
@@ -292,6 +324,19 @@ class LLMFallReviewer:
         result["sampled_frames"] = len(frames)
         result["frame_stride"] = frame_stride
         result["contact_sheet"] = contact_sheet
+        return result
+
+    def review_multiview_contact_sheets(self, sheets: list[np.ndarray], video_path: str | None = None) -> dict:
+        """Review one 9-frame contact sheet per camera view."""
+        result = self.review(
+            sheets,
+            prompt_text=MULTIVIEW_CONTACT_SHEET_PROMPT,
+        )
+        if video_path is not None:
+            result["video_path"] = video_path
+        result["sampled_frames"] = 9
+        result["contact_sheet"] = True
+        result["views"] = len(sheets)
         return result
 
     def review_with_context(self, frames: list[np.ndarray], evidence: str) -> dict:
