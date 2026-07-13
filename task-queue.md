@@ -4,18 +4,18 @@ This file records the next work after context compaction. Do not push or commit 
 
 ## P0 - 40-Frame Classifier Data Policy
 
-- [ ] Update `scripts/training/extract_dataset_3d.py` to generate explicit 40-frame samples.
-- [ ] Use cam1 as the reference timeline and rely on `MCFDReader`/CSV-derived offsets for cam4/cam7 synchronization.
-- [ ] Build legal fall candidates first, then sample from them:
+- [x] Update `scripts/training/extract_dataset_3d.py` to generate explicit 40-frame samples.
+- [x] Use cam1 as the reference timeline and rely on `MCFDReader`/CSV-derived offsets for cam4/cam7 synchronization.
+- [x] Build legal fall candidates first, then sample from them:
   - window length: 40 consecutive real-time frames
   - fall label: at least 25 consecutive frames overlap a fall interval
   - random selection is allowed only among legal candidates
-- [ ] Build legal normal candidates first, then sample from them:
+- [x] Build legal normal candidates first, then sample from them:
   - window length: 40 consecutive real-time frames
   - normal label: 0 frames overlap any fall interval
   - keep a safety gap from fall intervals where possible
-- [ ] Save features as `(N, 10, 40)` and labels as binary `normal/fall`.
-- [ ] Compile-check extraction code.
+- [x] Save features as `(N, 10, 40)` and labels as binary `normal/fall`.
+- [x] Compile-check extraction code.
 
 Validation:
 
@@ -33,13 +33,13 @@ Done when:
 
 ## P0 - 40-Frame Realtime Inference
 
-- [ ] Update `continuous_event_client.py` defaults:
+- [x] Update `continuous_event_client.py` defaults:
   - `classifier_window_steps=40`
   - `classifier_window_subsample=1` or remove subsampling from the realtime classifier path
   - `PersonState.features` retains at least 40 frames
-- [ ] Feed the classifier the latest 40 consecutive feature frames.
-- [ ] Keep existing delayed evidence policy: 90 pre/trigger frames + 151 post frames = 241-frame/8-second clip.
-- [ ] Compile-check client code.
+- [x] Feed the classifier the latest 40 consecutive feature frames.
+- [x] Keep existing delayed evidence policy: 90 pre/trigger frames + 151 post frames = 241-frame/8-second clip.
+- [x] Compile-check client code.
 
 Validation:
 
@@ -55,15 +55,15 @@ Done when:
 
 ## P0 - Retrain And Threshold Sweep
 
-- [ ] Confirm `models/enhanced_lstm.py` accepts sequence length 40 without shape assumptions.
-- [ ] Retrain after regenerating features.
-- [ ] Sweep thresholds on the new checkpoint.
-- [ ] Pick a roadshow threshold favoring recall while controlling obvious false positives.
+- [x] Confirm `models/enhanced_lstm.py` accepts sequence length 40 without shape assumptions.
+- [x] Retrain after regenerating features.
+- [x] Sweep thresholds on the new checkpoint.
+- [x] Pick a roadshow threshold favoring recall while controlling obvious false positives.
 
 Commands:
 
 ```powershell
-python scripts\training\train_3d.py --seed 42 --no-smote
+python scripts\training\train_3d.py --seed 20260713 --no-smote
 python scripts\training\sweep_threshold.py --checkpoint checkpoints\<new_run>\best_model.pth --split test --device cuda
 ```
 
@@ -72,6 +72,15 @@ Done when:
 - New checkpoint path is recorded.
 - Test/val metrics are copied into README and CLAUDE.
 - `continuous_event_client.py --checkpoint checkpoints\<new_run>\best_model.pth ...` works.
+
+Completed result:
+
+- Checkpoint: `checkpoints/archive/enhanced_3d_20260713_142749/best_model.pth`
+- Extraction/training seed: `20260713`, no SMOTE
+- Test AUC: `0.8030`
+- Threshold `0.075`: fall precision `0.392`, recall `1.000`
+- Threshold `0.40`: fall precision `0.702`, recall `0.698`
+- Chute03 realtime smoke triggered at frame `630` within labeled interval `603-633`
 
 ## P1 - Documentation And Runbook Refresh
 

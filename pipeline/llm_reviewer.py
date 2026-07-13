@@ -4,13 +4,13 @@ LLM Fall Review — Qwen3-VL-4B multimodal review for suspected fall events.
 Uses llama-cpp-python to run local quantized vision-language model.
 Only triggered when classifier outputs "suspected" (threshold_low < P_fall ≤ threshold_high).
 
-Model: Qwen3-VL-4B-Instruct Q4_K_M + mmproj Q8_0 (~3.6GB VRAM)
+Model: Qwen3-VL-4B-Instruct Q4_K_S + mmproj Q8_0
 Input:  1-3 keyframe images from the suspected time window
 Output: JSON with fall judgment + confidence + reasoning
 
 Usage:
     reviewer = LLMFallReviewer(
-        model_path="models/llm/Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+        model_path="models/llm/Qwen3-VL-4B-Instruct-Q4_K_S.gguf",
         mmproj_path="models/llm/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf",
     )
     if not reviewer.ready:
@@ -105,6 +105,53 @@ Example output:
 """
 
 
+SINGLE_VIEW_TIMELINE_DESCRIPTION_PROMPT = """You are describing one camera view for an elderly fall detection system.
+
+You will be shown 9 ordered frames from the same camera. The middle frame is
+the center of the most suspicious 40-frame 3D classifier window. The four
+earlier frames are sampled every 15 frames before it, and the four later frames
+are sampled every 15 frames after it. Treat them as a short timeline.
+
+Do not make a final multi-camera decision. Describe only what this camera view
+shows: posture, motion trend, whether the person becomes lower/horizontal, and
+whether visibility is clear or occluded.
+
+Output valid JSON only with exactly these fields:
+- "view": "{view_label}"
+- "visibility": "clear", "partial", or "poor"
+- "timeline_description": a concise 1-2 sentence description of the motion
+- "fall_evidence": a concise 1 sentence description of any fall-like evidence, or "none"
+- "view_suggests_fall": true or false
+- "confidence": a number from 0.0 to 1.0
+
+IMPORTANT: Only output the JSON object, nothing else.
+"""
+
+
+TEXT_FUSION_PROMPT = """You are the final safety reviewer for an elderly fall detection system.
+
+You are given three text-only observations from synchronized camera views.
+These observations were produced from 9 ordered frames per camera around the
+same suspicious event. You will not receive images in this step.
+
+Use the three view descriptions together. Prefer safety: if one or more clear
+views show a transition into a collapsed, horizontal, prone, supine, or
+fall-risk posture, classify the event as a fall. If evidence is unclear or
+conflicting, keep the event suspicious instead of calling it normal.
+
+Camera observations:
+{view_descriptions}
+
+Output valid JSON only with exactly these fields:
+- "is_fall": true or false
+- "confidence": a number from 0.0 to 1.0
+- "combined_description": a concise 1-2 sentence multi-view summary
+- "reason": a concise explanation of the final decision
+
+IMPORTANT: Only output the JSON object, nothing else.
+"""
+
+
 CONTEXT_FALL_REVIEW_PROMPT = """You are an AI safety reviewer for an elderly fall detection system.
 
 You will be shown {n_frames} keyframe images from a multi-camera surveillance video.
@@ -177,8 +224,11 @@ class LLMFallReviewer:
         self,
         model_path: str,
         mmproj_path: str,
-        n_ctx: int = 2048,
+        n_ctx: int = 1024,
         n_gpu_layers: int = -1,
+        n_batch: int = 256,
+        n_ubatch: int = 64,
+        max_image_side: int = 192,
         verbose: bool = False,
     ):
         """
@@ -187,10 +237,13 @@ class LLMFallReviewer:
             mmproj_path: Path to mmproj vision projector file.
             n_ctx: Context window size (keep small for low VRAM).
             n_gpu_layers: GPU layers; -1 = all, reduce if OOM.
+            n_batch: Logical batch size for llama.cpp compute buffers.
+            n_ubatch: Physical micro-batch size; lower values reduce VRAM spikes.
             verbose: Print llama.cpp logs.
         """
         self.model_path = model_path
         self.mmproj_path = mmproj_path
+        self.max_image_side = max_image_side
         self.ready = False
 
         if not HAS_LLAMA:
@@ -216,6 +269,8 @@ class LLMFallReviewer:
                 model_path=model_path,
                 n_ctx=n_ctx,
                 n_gpu_layers=n_gpu_layers,
+                n_batch=n_batch,
+                n_ubatch=n_ubatch,
                 chat_handler=chat_handler,
                 verbose=verbose,
             )
@@ -229,6 +284,7 @@ class LLMFallReviewer:
         self,
         frames: list[np.ndarray],
         prompt_text: Optional[str] = None,
+        max_tokens: int = 192,
         timeout: float = 30.0,
     ) -> dict:
         """Review keyframes for fall event.
@@ -246,6 +302,7 @@ class LLMFallReviewer:
 
         images_base64 = []
         for i, frame in enumerate(frames):
+            frame = resize_for_llm(frame, self.max_image_side)
             # Convert BGR to RGB for the model
             frame_rgb = frame[..., ::-1]
             # Encode to JPEG base64
@@ -279,7 +336,7 @@ class LLMFallReviewer:
         try:
             response = self.llm.create_chat_completion(
                 messages=messages,
-                max_tokens=256,
+                max_tokens=max_tokens,
                 temperature=0.1,
                 top_p=0.9,
             )
@@ -287,6 +344,26 @@ class LLMFallReviewer:
         except Exception as e:
             return _error(f"LLM inference failed: {e}")
 
+        return _parse_response(raw)
+
+    def complete_text_json(self, prompt_text: str, max_tokens: int = 192) -> dict:
+        """Run a text-only JSON completion."""
+        if not self.ready:
+            return _error("Model not loaded")
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt_text},
+        ]
+        try:
+            response = self.llm.create_chat_completion(
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=0.1,
+                top_p=0.9,
+            )
+            raw = response["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            return _error(f"LLM text fusion failed: {e}")
         return _parse_response(raw)
 
     def review_raw(self, frames: list[np.ndarray]) -> dict:
@@ -338,6 +415,66 @@ class LLMFallReviewer:
         result["contact_sheet"] = True
         result["views"] = len(sheets)
         return result
+
+    def describe_single_view_sequence(self, frames: list[np.ndarray], view_label: str) -> dict:
+        """Describe one camera's 9 ordered frames without making the final decision."""
+        sheet = make_contact_sheet(frames, columns=3, tile_width=128, label_prefix=f"{view_label}_t")
+        result = self.review(
+            [sheet],
+            prompt_text=SINGLE_VIEW_TIMELINE_DESCRIPTION_PROMPT.format(view_label=view_label),
+            max_tokens=160,
+        )
+        result["view"] = view_label
+        result["sampled_frames"] = len(frames)
+        result["contact_sheet"] = True
+        return result
+
+    def review_multiview_text_fusion(
+        self,
+        view_sequences: list[list[np.ndarray]],
+        view_labels: list[str] | None = None,
+        video_path: str | None = None,
+    ) -> dict:
+        """Describe each camera separately, then fuse the text observations."""
+        if view_labels is None:
+            view_labels = [f"cam{i + 1}" for i in range(len(view_sequences))]
+
+        view_results = []
+        for label, frames in zip(view_labels, view_sequences):
+            if not frames:
+                view_results.append({
+                    "view": label,
+                    "visibility": "poor",
+                    "timeline_description": "No frames were available for this camera.",
+                    "fall_evidence": "none",
+                    "view_suggests_fall": False,
+                    "confidence": 0.0,
+                })
+                continue
+            view_results.append(self.describe_single_view_sequence(frames, label))
+
+        compact_view_results = [compact_view_result(result, label) for result, label in zip(view_results, view_labels)]
+        view_descriptions = json.dumps(compact_view_results, ensure_ascii=False, separators=(",", ":"))
+        fused = self.complete_text_json(
+            TEXT_FUSION_PROMPT.format(view_descriptions=view_descriptions),
+            max_tokens=192,
+        )
+        fused["views"] = len(view_results)
+        fused["view_descriptions"] = view_results
+        fused["sampled_frames"] = len(view_sequences[0]) if view_sequences else 0
+        fused["fusion_mode"] = "single_view_descriptions_then_text_fusion"
+        if video_path is not None:
+            fused["video_path"] = video_path
+        return fused
+
+    def count_text_tokens(self, text: str, add_bos: bool = False) -> int | None:
+        """Count tokenizer tokens for text-only prompt budgeting."""
+        if not self.ready or self.llm is None:
+            return None
+        try:
+            return len(self.llm.tokenize(text.encode("utf-8"), add_bos=add_bos, special=True))
+        except TypeError:
+            return len(self.llm.tokenize(text.encode("utf-8"), add_bos=add_bos))
 
     def review_with_context(self, frames: list[np.ndarray], evidence: str) -> dict:
         """Second pass: review with overlaid system evidence and text summary."""
@@ -437,14 +574,39 @@ def _parse_response(raw: str) -> dict:
 
 def _validate(parsed: dict, raw: str) -> dict:
     """Validate and normalize parsed result."""
-    is_fall = bool(parsed.get("is_fall", False))
+    normalized = dict(parsed)
+    if "is_fall" in parsed:
+        is_fall = bool(parsed.get("is_fall", False))
+    elif "view_suggests_fall" in parsed:
+        is_fall = bool(parsed.get("view_suggests_fall", False))
+    else:
+        is_fall = False
     confidence = float(parsed.get("confidence", 0.5))
     confidence = max(0.0, min(1.0, confidence))
+    normalized["is_fall"] = is_fall
+    normalized["confidence"] = round(confidence, 3)
+    normalized["reason"] = str(
+        parsed.get(
+            "reason",
+            parsed.get(
+                "combined_description",
+                parsed.get("timeline_description", parsed.get("fall_evidence", "")),
+            ),
+        )
+    )[:300]
+    normalized["raw_response"] = raw
+    return normalized
+
+
+def compact_view_result(result: dict, fallback_view: str) -> dict:
+    """Keep only fields the text-fusion prompt actually needs."""
     return {
-        "is_fall": is_fall,
-        "confidence": round(confidence, 3),
-        "reason": str(parsed.get("reason", ""))[:300],
-        "raw_response": raw,
+        "view": result.get("view", fallback_view),
+        "visibility": result.get("visibility", "poor"),
+        "timeline_description": result.get("timeline_description", result.get("reason", "")),
+        "fall_evidence": result.get("fall_evidence", "none"),
+        "view_suggests_fall": bool(result.get("view_suggests_fall", result.get("is_fall", False))),
+        "confidence": float(result.get("confidence", 0.0) or 0.0),
     }
 
 
@@ -530,12 +692,27 @@ def cv2_imencode(frame_rgb: np.ndarray) -> tuple:
     return cv2.imencode(".jpg", frame_rgb, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
 
+def resize_for_llm(frame: np.ndarray, max_side: int) -> np.ndarray:
+    """Downscale BGR/RGB image before llama.cpp vision encoding."""
+    if max_side <= 0:
+        return frame
+    import cv2
+
+    h, w = frame.shape[:2]
+    longest = max(h, w)
+    if longest <= max_side:
+        return frame
+    scale = max_side / float(longest)
+    new_size = (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
+    return cv2.resize(frame, new_size, interpolation=cv2.INTER_AREA)
+
+
 # --- Quick test ---
 if __name__ == "__main__":
     import os
 
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    model = os.path.join(base, "models", "llm", "Qwen3VL-4B-Instruct-Q4_K_M.gguf")
+    model = os.path.join(base, "models", "llm", "Qwen3-VL-4B-Instruct-Q4_K_S.gguf")
     mmproj = os.path.join(base, "models", "llm", "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf")
 
     print(f"Model: {os.path.exists(model)}")

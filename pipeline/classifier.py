@@ -2,7 +2,7 @@
 3-Class Fall Classifier — wraps EnhancedFallDetector with dual-threshold logic.
 
 Model: BiLSTM + BiGRU + Bidirectional Multi-Head Self-Attention (~4.3M params)
-Input: (batch, 20, 10) — 10-D features over 20-frame sliding window
+Input: (batch, sequence, 10) — 10-D features over a temporal window
 Output: 3 classes via dual thresholds on fall probability.
 
 Decision logic:
@@ -54,6 +54,11 @@ class FallClassifier:
 
         ckpt = self._load_checkpoint_data(checkpoint_path)
         input_size = int(ckpt.get("input_size", input_size)) if isinstance(ckpt, dict) else input_size
+        self.sequence_length = (
+            int(ckpt["sequence_length"])
+            if isinstance(ckpt, dict) and ckpt.get("sequence_length") is not None
+            else None
+        )
 
         # Build model
         self.model = build_enhanced_model(
@@ -104,13 +109,17 @@ class FallClassifier:
         """Predict fall probability.
 
         Args:
-            features: (N, 20, 10) or (20, 10) — (seq_len=20, input_size=10).
+            features: (N, T, 10) or (T, 10), currently T=40.
         Returns:
             (N, 2) or (2,) probabilities [p_normal, p_fall].
         """
         single = (features.ndim == 2)
-        # Ensure shape (batch, 20, 10)
         x = features[np.newaxis, :, :] if single else features
+        if self.sequence_length is not None and x.shape[1] != self.sequence_length:
+            raise ValueError(
+                f"Sequence length {x.shape[1]} does not match checkpoint "
+                f"sequence length {self.sequence_length}"
+            )
         x = self._standardize(x.astype(np.float32, copy=False))
         x = torch.tensor(x, dtype=torch.float32).to(self.device)
 
@@ -190,7 +199,7 @@ class HeuristicClassifier:
             Otherwise → normal
         """
         if features.ndim == 2:
-            # (20, 10) → take mean over window
+            # (T, 10) -> take mean over window
             f = features.mean(axis=0)
         else:
             f = features
@@ -230,7 +239,7 @@ if __name__ == "__main__":
     print(f"  Model: BiLSTM+BiGRU+Attention (~4.3M params)")
 
     # Generate dummy features
-    normal_features = np.random.randn(1, 20, 10).astype(np.float32)
+    normal_features = np.random.randn(1, 40, 10).astype(np.float32)
     normal_features[:, :, 2] *= 0.3  # small torso angle
     normal_features[:, :, 4] += 1.0  # high COM
 

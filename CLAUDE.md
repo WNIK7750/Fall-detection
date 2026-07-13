@@ -23,7 +23,8 @@ Current architecture:
 
 ## Current Demo Status
 
-All P0-P3 roadshow tasks are implemented.
+The 40-frame classifier P0 migration is implemented. P1 roadshow QA and the
+remaining P2/P3 items are tracked in `task-queue.md`.
 
 - P0 continuous client: `continuous_event_client.py`
 - No-camera playmode: `playmode_event_loop.py`
@@ -32,22 +33,22 @@ All P0-P3 roadshow tasks are implemented.
 - LLM clip review: `scripts/qa/review_llm_clip.py`, `scripts/qa/qa_llm_clip_batch.py`
 - Runtime LLM review uses one background queue/worker with one loaded Qwen3-VL reviewer; the detector loop submits suspected clips and continues.
 - YOLO pose uses native batch inference across the three synchronized camera frames. Do not split this into three same-GPU processes unless a measured multi-GPU/IO bottleneck justifies it.
-- Current 3D checkpoint: `checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth`
-- Default review threshold: `0.40`
-- Next classifier/data task: migrate training and realtime classifier windows from the current 20-step/subsampled setup to explicit 40 consecutive 3D feature frames.
+- Current 3D checkpoint: `checkpoints/archive/enhanced_3d_20260713_142749/best_model.pth`
+- Default review threshold: `0.075`
+- Training and realtime inference now use explicit 40 consecutive 3D feature frames.
 
 Current best 3D classifier notes:
 
-- Test split: 147 windows, fall ratio `0.3673`
-- AUC-ROC: `0.9747`
-- At threshold `0.40`: fall recall `1.000`, fall precision `0.818`, CM `[[81, 12], [0, 54]]`
-- At threshold `0.30`: fall recall `1.000`, fall precision `0.783`, CM `[[78, 15], [0, 54]]`
+- Extraction seed: `20260713`; training seed: `20260713`; no SMOTE
+- Test split: 614 windows, fall ratio `0.2801`
+- AUC-ROC: `0.8030`
+- At threshold `0.075`: fall recall `1.000`, fall precision `0.392`, CM `[[175, 267], [0, 172]]`
+- At threshold `0.40`: fall recall `0.698`, fall precision `0.702`, CM `[[391, 51], [52, 120]]`
+- Chute03 realtime smoke: triggered at frame `630` inside labeled fall interval `603-633`; exported frames `541-781` as a 241-frame/8-second clip.
 
-Important: these metrics belong to the archived 20-step checkpoint. After the planned 40-frame feature extraction and retraining, update this section with the new checkpoint path and metrics.
+## 40-Frame Classifier Window
 
-## Planned 40-Frame Classifier Window
-
-The desired next implementation is not a full architecture rewrite. Keep the existing pipeline shape:
+The implemented pipeline shape is:
 
 ```text
 per-frame YOLO -> per-frame 3D skeleton -> per-frame 10-D feature
@@ -62,7 +63,8 @@ Target data/inference semantics:
 - Normal sample: a 40-frame cam1-reference window must contain 0 fall-labeled frames and should keep a safety gap from fall intervals.
 - Sampling may be random only after legal fall/normal candidate windows have been constructed.
 - Use `data_tuple3.csv` plus the existing `pipeline.sync.compute_offsets()` / `MCFDReader` alignment behavior. Choose windows on the cam1 reference timeline; `MCFDReader` reads cam4/cam7 with the correct offsets.
-- Old checkpoint and old `features/3d/*.npy` are not semantically valid for the 40-frame policy. Regenerate features, retrain, sweep thresholds, then update README/CLAUDE metrics.
+- Current `features/3d/*.npy` and the active archived checkpoint use this 40-frame policy.
+- Extraction preserves the reference-camera time axis, gives each decoded range 30 warmup frames, uses the 3D smoother for missing joints, and filters candidate windows by mean 3D quality.
 
 ## Privacy/Product Mechanism
 
@@ -71,14 +73,16 @@ This project targets elderly-home cameras connected to community staff. Treat pr
 - Process camera streams locally where possible.
 - Do not continuously upload or persist full video streams.
 - Keep a rolling in-memory buffer on the client.
-- Send an immediate `suspected` event without video when `p_fall >= 0.40`; all such events go through Qwen3-VL review.
+- Send an immediate `suspected` event without video when `p_fall >= 0.075`; all such events go through Qwen3-VL review.
+- Event suppression is episode-based per track. While an event is pending, stronger triggers within 180 frames update the same `event_id` and move its evidence window instead of creating another dashboard card. After the episode trigger, new events for that track are suppressed for 300 frames, while YOLO, 3D reconstruction, smoothing, and rolling feature buffers continue running.
 - Treat MCFD AVI files as 30 FPS real time even though the container reports 120 FPS.
 - On classifier trigger, keep the trigger event pending until 151 post-trigger frames have been collected. Evidence clips contain 90 pre/trigger frames + 151 post frames = 241 frames, exactly 8.0 seconds at 30 FPS.
-- Qwen3-VL reviews three images: one 3x3 contact sheet per camera view. Each sheet samples 9 frames from the 241-frame evidence window using stride 29.
+- Qwen3-VL review is a two-stage low-VRAM flow. For each camera separately, sample 9 frames around the center of the most suspicious 40-frame classifier window: 4 frames before, the center frame, and 4 frames after, using 15-frame spacing. Pack each camera's 9 frames into one small 3x3 contact sheet, have Qwen turn each camera timeline into a structured text description, then use a final text-only prompt to fuse the three descriptions into the event judgment.
 - Do not run LLM review or release video until the full 241-frame evidence window is available.
 - Use the same `event_id` for initial suspected alert and final LLM update.
 - The current roadshow policy does not use direct classifier-only fall alerts; LLM decides whether a suspected event becomes `fall`.
 - Dashboard playback fetches released clips via one `/clip-frames` request and plays the cached frames locally. Do not reintroduce per-frame HTTP polling for playback.
+- Keep LLM image inputs small on 8GB GPUs. The defaults are `n_gpu_layers=20`, `n_ctx=1024`, `n_batch=256`, `n_ubatch=64`, and single-frame longest side 192 px.
 
 ## Roadshow Commands
 
@@ -133,8 +137,8 @@ python scripts/qa/qa_llm_clip_batch.py --videos clips/s01_1050_90.mp4 clips/s01_
 3D extraction / training / threshold sweep:
 
 ```bash
-python scripts/training/extract_dataset_3d.py --device cuda --yolo-batch 32 --time-batch 64 --min-quality 0.15 --max-normal 300
-python scripts/training/train_3d.py --seed 42 --no-smote
+python scripts/training/extract_dataset_3d.py --device cuda --yolo-batch 32 --time-batch 64 --min-quality 0.15 --max-normal 300 --seed 20260713
+python scripts/training/train_3d.py --seed 20260713 --no-smote
 python scripts/training/sweep_threshold.py --split test --device cuda
 ```
 
@@ -161,7 +165,7 @@ python scripts/training/sweep_threshold.py --split test --device cuda
 | `scripts/qa/` | LLM and pose QA helpers |
 | `scripts/demo/` | Visual/manual demo helpers |
 | `scripts/tools/` | Dataset clip export and utility scripts |
-| `checkpoints/archive/enhanced_3d_20260712_185406/` | Current shipped 3D checkpoint |
+| `checkpoints/archive/enhanced_3d_20260713_142749/` | Current shipped 40-frame 3D checkpoint |
 
 ## Local Artifacts And Git Hygiene
 
@@ -176,8 +180,8 @@ Do not commit:
 Commit and keep:
 
 - `yolov8n-pose.pt`
-- `checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth`
-- `checkpoints/archive/enhanced_3d_20260712_185406/history.json`
+- `checkpoints/archive/enhanced_3d_20260713_142749/best_model.pth`
+- `checkpoints/archive/enhanced_3d_20260713_142749/history.json`
 - `features/3d/{train,val,test,scaler}/`
 
 ## Demo Boundaries

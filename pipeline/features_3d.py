@@ -19,8 +19,8 @@ Feature list (10-D, matching original 2D design):
   F9 : 头部高度 (Head Height)        — normalized Z of nose
   F10: 脊柱方向 (Spine Direction)    — Z component of spine unit vector
 
-Each feature is computed per-frame, then accumulated over a 20-frame
-sliding window (stride 5) to feed the BiLSTM+BiGRU classifier.
+Each feature is computed per-frame, then accumulated over a 40-frame
+consecutive sliding window to feed the BiLSTM+BiGRU classifier.
 """
 
 import numpy as np
@@ -213,9 +213,9 @@ def _safe_com(skel: np.ndarray) -> np.ndarray | None:
 
 def extract_window(
     skeletons: list[np.ndarray],
-    window_size: int = 20,
+    window_size: int = 40,
     stride: int = 5,
-    subsample: int = 3,
+    subsample: int = 1,
 ) -> tuple[np.ndarray, list[int]]:
     """Extract sliding windows of features from a skeleton sequence.
 

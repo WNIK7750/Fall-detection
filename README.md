@@ -103,7 +103,7 @@ python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-
 Dashboard event policy:
 
 - `fall`: immediately exports a clip and shows it in the Fall column.
-- `suspected`: first sends an alert without video, then waits for post-event context, exports an 8-second clip, and sends three 3x3 contact sheets (one per camera view) to local Qwen3-VL review.
+- `suspected`: first sends an alert without video, then waits for post-event context, exports an 8-second clip, describes one small 3x3 contact sheet per camera with Qwen3-VL, and fuses the three text descriptions into the final review.
 - LLM says fall: same `event_id` is updated to `fall`; the old suspected card disappears and the Fall card shows video.
 - LLM says not fall: same event stays in the Suspected column as manual review. Staff can click `Request video`; after 30 seconds the video preview is released for human review.
 - Dashboard playback does not stream one frame per request. Released clips are loaded through one `/clip-frames` request into the browser, then played locally with a play/pause button and progress bar.
@@ -120,30 +120,36 @@ python scripts/qa/qa_llm_clip_batch.py --videos clips/s01_1050_90.mp4 clips/s01_
 Current 3D checkpoint:
 
 ```text
-checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth
+checkpoints/archive/enhanced_3d_20260713_142749/best_model.pth
 ```
 
 Validation notes:
 
-- Test split: 147 windows, fall ratio `0.3673`
-- AUC-ROC: `0.9747`
-- At threshold `0.40`: fall recall `1.000`, fall precision `0.818`, CM `[[81, 12], [0, 54]]`
-- At threshold `0.30`: fall recall `1.000`, fall precision `0.783`, CM `[[78, 15], [0, 54]]`
+- Extraction seed `20260713`, training seed `20260713`, no SMOTE
+- Test split: 614 windows, fall ratio `0.2801`
+- AUC-ROC: `0.8030`
+- At threshold `0.075`: fall recall `1.000`, fall precision `0.392`, CM `[[175, 267], [0, 172]]`
+- At threshold `0.40`: fall recall `0.698`, fall precision `0.702`, CM `[[391, 51], [52, 120]]`
+- Realtime chute03 smoke triggered at frame `630`, inside the labeled fall interval `603-633`.
 
 Runtime policy:
 
-- `p_fall < 0.40`: normal, no event
-- `p_fall >= 0.40`: suspected, send immediate alert without video, collect 151 post-trigger frames, export a 241-frame/8-second clip, and sample 9 frames per camera view with stride 29 for Qwen3-VL
+- `p_fall < 0.075`: normal, no event
+- `p_fall >= 0.075`: suspected, send immediate alert without video, collect 151 post-trigger frames, export a 241-frame/8-second clip, and run Qwen3-VL review.
 - LLM says fall: update the same `event_id` to `fall` and release the clip
 - Events are initially emitted only after the rolling buffer has at least 90 pre-trigger frames. LLM review and video release happen only after the full 241-frame evidence clip is available.
+- Event suppression is episode-based per track. While an event is pending, stronger triggers within 180 frames update the same `event_id` and move its evidence window instead of creating another dashboard card. After the episode trigger, new events for that track are suppressed for 300 frames, while YOLO, 3D reconstruction, smoothing, and rolling feature buffers continue running.
+- Qwen3-VL uses a low-VRAM two-stage review. It samples 9 frames per camera around the center of the most suspicious 40-frame classifier window: 4 before, the center frame, and 4 after, spaced 15 frames apart. Each camera's 9 frames are packed into one small 3x3 contact sheet and described separately, then a final text-only prompt fuses the three descriptions into the fall decision.
+- Default LLM stability settings for 8GB GPUs: `--n-gpu-layers 20`, `--n-ctx 1024`, `--n-batch 256`, `--n-ubatch 64`, `--llm-image-max-side 192`.
 
-Planned classifier window update:
+Classifier window policy:
 
 - Training and realtime inference should use 40 consecutive 3D feature frames as one sample/window.
 - A fall training sample is valid only when its 40-frame reference-time window contains at least 25 consecutive fall-labeled frames.
 - A normal training sample must contain 0 fall-labeled frames and should keep a safety gap from nearby fall intervals.
 - Multi-camera extraction uses cam1 as the reference timeline. `MCFDReader` applies CSV-derived camera offsets so cam4/cam7 are read in sync with the cam1 reference frame.
-- This update changes the training data distribution, so features and the 3D checkpoint must be regenerated before using the new window policy in the roadshow path.
+- Extraction preserves frame positions instead of compressing missing frames. It uses 30 warmup frames for 3D smoothing and rejects windows whose mean 3D quality is below the configured extraction threshold.
+- Current `features/3d/` arrays and the active archived checkpoint already use this policy.
 
 ## Setup
 
@@ -177,7 +183,7 @@ Expected local layout:
 dataset/mcfd/dataset/chute01/cam1.avi
 dataset/mcfd/dataset/chute01/cam4.avi
 dataset/mcfd/dataset/chute01/cam7.avi
-models/llm/Qwen3VL-4B-Instruct-Q4_K_M.gguf
+models/llm/Qwen3-VL-4B-Instruct-Q4_K_S.gguf
 models/llm/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf
 ```
 
@@ -190,8 +196,8 @@ models/llm/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf
 Small model artifacts stored in Git:
 
 - `yolov8n-pose.pt`
-- `checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth`
-- `checkpoints/archive/enhanced_3d_20260712_185406/history.json`
+- `checkpoints/archive/enhanced_3d_20260713_142749/best_model.pth`
+- `checkpoints/archive/enhanced_3d_20260713_142749/history.json`
 - `features/3d/{train,val,test,scaler}/`
 
 ## Useful Commands
@@ -199,7 +205,7 @@ Small model artifacts stored in Git:
 Extract 3D dataset features:
 
 ```bash
-python scripts/training/extract_dataset_3d.py --device cuda --yolo-batch 32 --time-batch 64 --min-quality 0.15 --max-normal 300
+python scripts/training/extract_dataset_3d.py --device cuda --yolo-batch 32 --time-batch 64 --min-quality 0.15 --max-normal 300 --seed 20260713
 ```
 
 The next extraction pass should generate 40-frame samples explicitly from legal candidate windows: fall windows must include at least 25 consecutive fall frames, while normal windows must include no fall frames.
@@ -207,7 +213,7 @@ The next extraction pass should generate 40-frame samples explicitly from legal 
 Train 3D classifier:
 
 ```bash
-python scripts/training/train_3d.py --seed 42 --no-smote
+python scripts/training/train_3d.py --seed 20260713 --no-smote
 ```
 
 Sweep thresholds:

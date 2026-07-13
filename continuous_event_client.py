@@ -22,8 +22,10 @@ import argparse
 import json
 import os
 import random
+import threading
 import time
 from collections import deque
+from contextlib import nullcontext
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,30 +41,38 @@ from pipeline.clip_buffer import BufferedFrame, RollingClipBuffer
 from pipeline.event_schema import build_event_payload
 from pipeline.event_sender import send_event
 from pipeline.features_3d import FloorEstimator, compute_features
-from pipeline.llm_reviewer import LLMFallReviewer, make_contact_sheet, make_multiview_collage
+from pipeline.llm_reviewer import (
+    LLMFallReviewer,
+    SINGLE_VIEW_TIMELINE_DESCRIPTION_PROMPT,
+    SYSTEM_PROMPT,
+    TEXT_FUSION_PROMPT,
+    make_multiview_collage,
+)
 from pipeline.pose_inference import MultiPersonTracker, PoseDetector
 from pipeline.triangulation import KalmanSmoother, Triangulator
 from pipeline.video_reader import MCFDReader, find_fall_segments, load_annotations
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_3D_CHECKPOINT = BASE_DIR / "checkpoints" / "archive" / "enhanced_3d_20260712_185406" / "best_model.pth"
-DEFAULT_MODEL = BASE_DIR / "models" / "llm" / "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
+DEFAULT_3D_CHECKPOINT = BASE_DIR / "checkpoints" / "archive" / "enhanced_3d_20260713_142749" / "best_model.pth"
+DEFAULT_MODEL = BASE_DIR / "models" / "llm" / "Qwen3-VL-4B-Instruct-Q4_K_S.gguf"
 DEFAULT_MMPROJ = BASE_DIR / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
 
 
 @dataclass
 class PersonState:
-    features: deque[np.ndarray] = field(default_factory=lambda: deque(maxlen=60))
-    qualities: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=60))
-    skeletons: deque[np.ndarray] = field(default_factory=lambda: deque(maxlen=60))
+    features: deque[np.ndarray] = field(default_factory=lambda: deque(maxlen=80))
+    qualities: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=80))
+    skeletons: deque[np.ndarray] = field(default_factory=lambda: deque(maxlen=80))
     centroids: deque[np.ndarray] = field(default_factory=lambda: deque(maxlen=30))
     speeds: deque[float] = field(default_factory=lambda: deque(maxlen=30))
     floor_estimator: FloorEstimator = field(default_factory=FloorEstimator)
     smoother: KalmanSmoother = field(default_factory=KalmanSmoother)
     status: str = "normal"
     last_event_frame: int = -10_000
+    event_lock_until_frame: int = -10_000
     rejected_frames: int = 0
+    last_feature_frame: int | None = None
 
 
 @dataclass
@@ -76,6 +86,7 @@ class PendingEvent:
     quality: float | None
     trigger_reason: str
     status: str = "suspected"
+    last_update_frame: int = -10_000
 
 
 def skeleton_centroid(skeleton: np.ndarray) -> np.ndarray | None:
@@ -98,7 +109,8 @@ def temporal_gate(
     """Reject unstable 3D detections before they enter feature/classifier state."""
     score = float(quality.get("score", 0.0))
     valid_ratio = float(quality.get("valid_joint_ratio", 0.0))
-    if score < min_quality or valid_ratio < 0.35:
+    low_quality = score < min_quality or valid_ratio < 0.35
+    if low_quality and not state.skeletons:
         return False, f"low skeleton quality score={score:.2f} valid={valid_ratio:.2f}"
 
     centroid = skeleton_centroid(skeleton)
@@ -117,6 +129,8 @@ def temporal_gate(
                     f"limit={adaptive_limit:.2f}"
                 )
             return False, f"unreasonable 3D centroid jump speed={speed:.2f} limit={adaptive_limit:.2f}"
+    if low_quality:
+        return True, f"accepted via smoother score={score:.2f} valid={valid_ratio:.2f}"
     return True, "accepted"
 
 
@@ -159,8 +173,9 @@ def load_classifier(args: argparse.Namespace):
                 checkpoint_path=args.checkpoint,
                 threshold_low=args.threshold_low,
                 threshold_high=args.threshold_high,
+                device=args.classifier_device,
             )
-            print(f"[classifier] loaded ML checkpoint: {args.checkpoint}")
+            print(f"[classifier] loaded ML checkpoint: {args.checkpoint} device={classifier.device}")
             return classifier
         except (FileNotFoundError, RuntimeError, TypeError, ValueError) as exc:
             print(f"[classifier] WARNING: {exc}")
@@ -176,10 +191,57 @@ def load_reviewer(args: argparse.Namespace) -> LLMFallReviewer | None:
         mmproj_path=args.mmproj,
         n_ctx=args.n_ctx,
         n_gpu_layers=args.n_gpu_layers,
+        n_batch=args.n_batch,
+        n_ubatch=args.n_ubatch,
+        max_image_side=args.llm_image_max_side,
     )
     if not reviewer.ready:
         raise RuntimeError("LLM reviewer failed to load")
     return reviewer
+
+
+def is_cuda_device(device: str | None) -> bool:
+    if device is None:
+        return False
+    normalized = str(device).strip().lower()
+    return normalized == "cuda" or normalized.startswith("cuda:") or normalized.isdigit()
+
+
+def maybe_gpu_lock(lock: threading.RLock | None, enabled: bool):
+    return lock if lock is not None and enabled else nullcontext()
+
+
+def llm_error_result(reason: str) -> dict[str, Any]:
+    return {
+        "status": "suspected",
+        "is_fall": None,
+        "confidence": 0.0,
+        "reason": reason,
+    }
+
+
+def print_llm_token_budget(reviewer: LLMFallReviewer, view_labels: list[str]) -> None:
+    sample_views = [
+        {
+            "view": label,
+            "visibility": "clear",
+            "timeline_description": "The person moves through the sampled timeline.",
+            "fall_evidence": "none",
+            "view_suggests_fall": False,
+            "confidence": 0.5,
+        }
+        for label in view_labels
+    ]
+    fusion_prompt = TEXT_FUSION_PROMPT.format(
+        view_descriptions=json.dumps(sample_views, ensure_ascii=False, separators=(",", ":"))
+    )
+    print("[llm-tokens] text-only tokenizer counts; each visual call also adds 64 image tokens in current logs")
+    for label in view_labels:
+        prompt = SINGLE_VIEW_TIMELINE_DESCRIPTION_PROMPT.format(view_label=label)
+        count = reviewer.count_text_tokens(f"{SYSTEM_PROMPT}\n{prompt}", add_bos=False)
+        print(f"[llm-tokens] single_view_{label}_text={count}")
+    count = reviewer.count_text_tokens(f"{SYSTEM_PROMPT}\n{fusion_prompt}", add_bos=False)
+    print(f"[llm-tokens] fusion_text_compact_sample={count}")
 
 
 def review_clip(reviewer: LLMFallReviewer | None, clip_path: str, args: argparse.Namespace) -> dict[str, Any]:
@@ -215,7 +277,8 @@ def review_clip(reviewer: LLMFallReviewer | None, clip_path: str, args: argparse
 def review_event_evidence(
     reviewer: LLMFallReviewer | None,
     clip_path: str,
-    contact_sheets: list[np.ndarray],
+    view_sequences: list[list[np.ndarray]],
+    view_labels: list[str],
     args: argparse.Namespace,
 ) -> dict[str, Any]:
     if reviewer is None:
@@ -225,8 +288,12 @@ def review_event_evidence(
             "confidence": 0.0,
             "reason": "LLM review disabled; event remains suspected.",
         }
-    if contact_sheets:
-        result = reviewer.review_multiview_contact_sheets(contact_sheets, video_path=clip_path)
+    if view_sequences:
+        result = reviewer.review_multiview_text_fusion(
+            view_sequences,
+            view_labels=view_labels,
+            video_path=clip_path,
+        )
     else:
         result = reviewer.review_video_file(
             video_path=clip_path,
@@ -248,7 +315,9 @@ def review_event_evidence(
         "video_path": result.get("video_path"),
         "sampled_frames": result.get("sampled_frames"),
         "views": result.get("views"),
-        "contact_sheet": result.get("contact_sheet"),
+        "fusion_mode": result.get("fusion_mode"),
+        "view_descriptions": result.get("view_descriptions"),
+        "combined_description": result.get("combined_description"),
     }
 
 
@@ -269,7 +338,7 @@ class LLMReviewManager:
     GPU/CPU memory is not thrashed by concurrent LLM calls.
     """
 
-    def __init__(self, enabled: bool, args: argparse.Namespace):
+    def __init__(self, enabled: bool, args: argparse.Namespace, gpu_lock: threading.RLock | None = None):
         self._executor = (
             ThreadPoolExecutor(max_workers=1, thread_name_prefix="llm-review")
             if enabled
@@ -279,6 +348,8 @@ class LLMReviewManager:
         self._args = args
         self._reviewer: LLMFallReviewer | None = None
         self._pending: list[Future] = []
+        self._gpu_lock = gpu_lock
+        self._printed_token_budget = False
 
     def submit(self, task: Callable[[], None]) -> Future | None:
         if self._executor is None:
@@ -298,16 +369,32 @@ class LLMReviewManager:
     def review_clip(self, clip_path: str) -> dict[str, Any]:
         if not self._enabled:
             return review_clip(None, clip_path, self._args)
-        if self._reviewer is None:
-            self._reviewer = load_reviewer(self._args)
-        return review_clip(self._reviewer, clip_path, self._args)
+        try:
+            with maybe_gpu_lock(self._gpu_lock, self._args.llm_gpu_lock):
+                if self._reviewer is None:
+                    self._reviewer = load_reviewer(self._args)
+                return review_clip(self._reviewer, clip_path, self._args)
+        except Exception as exc:
+            return llm_error_result(f"LLM review failed; event remains suspected: {exc}")
 
-    def review_event_evidence(self, clip_path: str, contact_sheets: list[np.ndarray]) -> dict[str, Any]:
+    def review_event_evidence(
+        self,
+        clip_path: str,
+        view_sequences: list[list[np.ndarray]],
+        view_labels: list[str],
+    ) -> dict[str, Any]:
         if not self._enabled:
-            return review_event_evidence(None, clip_path, contact_sheets, self._args)
-        if self._reviewer is None:
-            self._reviewer = load_reviewer(self._args)
-        return review_event_evidence(self._reviewer, clip_path, contact_sheets, self._args)
+            return review_event_evidence(None, clip_path, view_sequences, view_labels, self._args)
+        try:
+            with maybe_gpu_lock(self._gpu_lock, self._args.llm_gpu_lock):
+                if self._reviewer is None:
+                    self._reviewer = load_reviewer(self._args)
+                if self._args.llm_debug_tokens and not self._printed_token_budget:
+                    print_llm_token_budget(self._reviewer, view_labels)
+                    self._printed_token_budget = True
+                return review_event_evidence(self._reviewer, clip_path, view_sequences, view_labels, self._args)
+        except Exception as exc:
+            return llm_error_result(f"LLM review failed; event remains suspected: {exc}")
 
     def shutdown(self) -> None:
         if self._executor is not None:
@@ -375,29 +462,74 @@ def make_initial_suspected_payload(
     return payload
 
 
-def make_view_contact_sheets(
+def find_pending_event(
+    pending_events: list[PendingEvent],
+    track_id: int | None,
+) -> PendingEvent | None:
+    for event in pending_events:
+        if event.track_id == track_id:
+            return event
+    return None
+
+
+def should_merge_trigger(
+    event: PendingEvent,
+    *,
+    frame_index: int,
+    p_fall: float,
+    args: argparse.Namespace,
+) -> bool:
+    if frame_index > event.trigger_frame + args.event_merge_frames:
+        return False
+    return p_fall > event.p_fall + args.event_merge_min_probability_delta
+
+
+def merge_trigger_into_event(
+    event: PendingEvent,
+    *,
+    frame_index: int,
+    p_fall: float,
+    quality: float | None,
+    trigger_reason: str,
+    args: argparse.Namespace,
+) -> None:
+    event.trigger_frame = frame_index
+    event.release_frame = frame_index + args.event_post_frames
+    event.p_fall = p_fall
+    event.quality = quality
+    event.trigger_reason = f"{trigger_reason}; merged into existing event episode"
+    event.last_update_frame = frame_index
+
+
+def make_view_frame_sequences(
     buffered_frames: list[BufferedFrame],
     camera_count: int,
-    sample_stride: int,
-    sample_count: int,
-) -> list[np.ndarray]:
-    if not buffered_frames or buffered_frames[0].views is None:
+    center_frame: int,
+    before_count: int,
+    after_count: int,
+    stride: int,
+) -> list[list[np.ndarray]]:
+    if not buffered_frames:
         return []
-    indices = [i * sample_stride for i in range(sample_count)]
-    indices = [idx for idx in indices if idx < len(buffered_frames)]
-    if not indices:
+    by_frame = {item.frame_index: item for item in buffered_frames}
+    offsets = [i * stride for i in range(-before_count, after_count + 1)]
+    target_frames = [center_frame + offset for offset in offsets]
+    if not target_frames:
         return []
 
-    sheets: list[np.ndarray] = []
+    sequences: list[list[np.ndarray]] = []
     for view_idx in range(camera_count):
-        view_frames = []
-        for idx in indices:
-            views = buffered_frames[idx].views
+        frames: list[np.ndarray] = []
+        for frame_index in target_frames:
+            item = by_frame.get(frame_index)
+            if item is None:
+                return []
+            views = item.views
             if views is None or view_idx >= len(views):
                 return []
-            view_frames.append(views[view_idx])
-        sheets.append(make_contact_sheet(view_frames, columns=3, tile_width=320, label_prefix=f"c{view_idx + 1}_t"))
-    return sheets
+            frames.append(views[view_idx])
+        sequences.append(frames)
+    return sequences
 
 
 def finalize_pending_event(
@@ -425,16 +557,20 @@ def finalize_pending_event(
         return None
 
     evidence_frames = clip_buffer.range_by_frame(start_frame, end_frame)
-    contact_sheets = make_view_contact_sheets(
+    llm_center_frame = event.trigger_frame - args.classifier_window_steps // 2
+    view_sequences = make_view_frame_sequences(
         evidence_frames,
         camera_count=len(args.cameras),
-        sample_stride=args.llm_sheet_stride,
-        sample_count=args.llm_sheet_frames,
+        center_frame=llm_center_frame,
+        before_count=args.llm_pre_samples,
+        after_count=args.llm_post_samples,
+        stride=args.llm_temporal_stride,
     )
+    view_labels = [f"cam{camera_id}" for camera_id in args.cameras]
     clip_path = clip_info.path
 
     def review_and_send() -> None:
-        llm_review = review_manager.review_event_evidence(clip_path, contact_sheets)
+        llm_review = review_manager.review_event_evidence(clip_path, view_sequences, view_labels)
         reviewed_status = llm_review.get("status", "suspected")
         final_status = "fall" if reviewed_status == "fall" else "suspected"
         final_payload = build_event_payload(
@@ -458,9 +594,11 @@ def finalize_pending_event(
         final_payload["event_timestamp_sec"] = round(event.trigger_frame / max(args.fps, 1e-6), 3)
         final_payload["clip_meta"] = clip_meta_payload(clip_info)
         final_payload["llm_sample"] = {
-            "views": len(contact_sheets),
-            "frames_per_view": args.llm_sheet_frames,
-            "stride_frames": args.llm_sheet_stride,
+            "views": len(view_sequences),
+            "frames_per_view": args.llm_pre_samples + 1 + args.llm_post_samples,
+            "center_frame": llm_center_frame,
+            "stride_frames": args.llm_temporal_stride,
+            "mode": "single_view_descriptions_then_text_fusion",
         }
         send_or_print(final_payload, args)
 
@@ -673,11 +811,15 @@ def run_client(args: argparse.Namespace) -> None:
     output_dir = Path(args.clip_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    detector = PoseDetector(enable_fallback=args.pose_fallback)
+    gpu_lock = threading.RLock()
+    pose_uses_gpu = is_cuda_device(args.pose_device)
+    classifier_uses_gpu = is_cuda_device(args.classifier_device)
+
+    detector = PoseDetector(device=args.pose_device, enable_fallback=args.pose_fallback)
     projections = get_projections(camera_ids)
     tri = Triangulator(projections)
     classifier = load_classifier(args)
-    review_manager = LLMReviewManager(enabled=args.llm, args=args)
+    review_manager = LLMReviewManager(enabled=args.llm, args=args, gpu_lock=gpu_lock)
     pending_reviews: list[Future] = []
     rng = random.Random(args.seed)
     scenario_pool = args.scenarios or [args.scenario]
@@ -685,9 +827,10 @@ def run_client(args: argparse.Namespace) -> None:
     start_time = time.time()
     print(
         f"[client] scenarios={scenario_pool} cameras={camera_ids} "
-        f"review_threshold={args.threshold_low:.2f} "
+        f"review_threshold={args.threshold_low:.3f} "
         f"buffer={args.buffer_frames} export={args.event_clip_frames}@{args.clip_fps:g}fps "
-        f"pre={args.event_pre_frames} post={args.event_post_frames}"
+        f"pre={args.event_pre_frames} post={args.event_post_frames} "
+        f"pose_device={detector.device}"
     )
 
     try:
@@ -722,7 +865,8 @@ def run_client(args: argparse.Namespace) -> None:
                     collage = make_multiview_collage(frames, labels=[f"Cam{cid}" for cid in camera_ids])
                     clip_buffer.append(frame_idx, collage, views=frames)
     
-                    raw_persons = detector.infer_batch_all(frames)
+                    with maybe_gpu_lock(gpu_lock, args.llm_gpu_lock and pose_uses_gpu):
+                        raw_persons = detector.infer_batch_all(frames)
                     tracked = tracker.update(raw_persons)
                     view0_tracks = tracked[0] if tracked else []
                     if args.max_people > 0:
@@ -759,47 +903,71 @@ def run_client(args: argparse.Namespace) -> None:
                         )
                         if not accepted:
                             state.rejected_frames += 1
+                            state.features.clear()
+                            state.qualities.clear()
+                            state.skeletons.clear()
+                            state.last_feature_frame = None
                             if args.verbose:
                                 print(f"[gate] frame={frame_idx} track={track_id} rejected: {gate_reason}")
                             continue
     
+                        if state.last_feature_frame is not None and frame_idx != state.last_feature_frame + 1:
+                            state.features.clear()
+                            state.qualities.clear()
+                            state.skeletons.clear()
+
                         update_temporal_state(state, skel, fps=args.fps)
                         state.qualities.append(quality)
                         prev_skel = state.skeletons[-1] if state.skeletons else None
                         features = compute_features(skel, prev_skel, floor_estimator=state.floor_estimator)
-                        if features is not None:
-                            features[3] = features[2] - state.features[-1][2] if state.features else 0.0
-                            state.features.append(features)
+                        if features is None:
+                            state.features.clear()
+                            state.qualities.clear()
+                            state.skeletons.clear()
+                            state.last_feature_frame = None
+                            continue
+                        features[3] = features[2] - state.features[-1][2] if state.features else 0.0
+                        state.features.append(features)
                         state.skeletons.append(skel.copy())
+                        state.last_feature_frame = frame_idx
     
-                        required_features = (
-                            (args.classifier_window_steps - 1) * args.classifier_window_subsample + 1
-                        )
+                        required_features = args.classifier_window_steps
                         if len(state.features) < required_features or frame_idx % args.classify_stride != 0:
                             continue
                         state.rejected_frames = 0
 
                         recent_features = list(state.features)[-required_features:]
                         window = np.array(
-                            recent_features[::args.classifier_window_subsample],
+                            recent_features,
                             dtype=np.float32,
                             copy=True,
                         )
                         for i in range(len(window)):
                             window[i, 3] = window[i, 2] - window[i - 1, 2] if i > 0 else 0.0
-                        cls_result = classifier.predict(window)
+                        mean_quality = float(
+                            np.mean(
+                                [
+                                    q["score"]
+                                    for q in list(state.qualities)[-args.classifier_window_steps:]
+                                ]
+                            )
+                        )
+                        if mean_quality < args.quality_threshold:
+                            if args.verbose:
+                                print(
+                                    f"[classifier] frame={frame_idx} track={track_id} "
+                                    f"skipped low window quality={mean_quality:.2f}"
+                                )
+                            continue
+                        with maybe_gpu_lock(gpu_lock, args.llm_gpu_lock and classifier_uses_gpu):
+                            cls_result = classifier.predict(window)
                         p_fall = float(cls_result["fall_prob"])
                         status = status_from_probability(p_fall, args.threshold_low, args.threshold_high)
-                        mean_quality = float(np.mean([q["score"] for q in list(state.qualities)[-20:]]))
                         if args.log_prob_every and frame_idx % args.log_prob_every == 0:
                             print(
                                 f"[prob] frame={frame_idx} track={track_id} "
                                 f"p_fall={p_fall:.3f} status={status} quality={mean_quality:.2f}"
                             )
-                        if mean_quality < args.quality_threshold and status == "fall":
-                            status = "suspected"
-                            gate_reason = f"fall downgraded by recent quality={mean_quality:.2f}"
-
                         forced = args.force_trigger_frame is not None and frame_idx >= args.force_trigger_frame
                         if forced and state.last_event_frame < 0:
                             p_fall = args.force_p_fall
@@ -809,7 +977,13 @@ def run_client(args: argparse.Namespace) -> None:
                         state.status = status
                         if status == "normal":
                             continue
-                        if frame_idx - state.last_event_frame < args.event_cooldown_frames:
+                        pending_event = find_pending_event(pending_events, track_id)
+                        if pending_event is None and frame_idx < state.event_lock_until_frame:
+                            if args.verbose:
+                                print(
+                                    f"[event-lock] frame={frame_idx} track={track_id} "
+                                    f"locked_until={state.event_lock_until_frame}"
+                                )
                             continue
                         if len(clip_buffer) < args.event_pre_frames:
                             if args.verbose:
@@ -818,13 +992,35 @@ def run_client(args: argparse.Namespace) -> None:
                                     f"{args.event_pre_frames} pre-event frames ({len(clip_buffer)} ready)"
                                 )
                             continue
-                        if any(event.track_id == track_id for event in pending_events):
-                            continue
-
                         trigger_reason = (
                             f"classifier p_fall={p_fall:.3f}; status={status}; "
                             f"quality={mean_quality:.2f}; {gate_reason}"
                         )
+                        if pending_event is not None:
+                            if should_merge_trigger(
+                                pending_event,
+                                frame_index=frame_idx,
+                                p_fall=p_fall,
+                                args=args,
+                            ):
+                                merge_trigger_into_event(
+                                    pending_event,
+                                    frame_index=frame_idx,
+                                    p_fall=p_fall,
+                                    quality=mean_quality,
+                                    trigger_reason=trigger_reason,
+                                    args=args,
+                                )
+                                state.last_event_frame = frame_idx
+                                state.event_lock_until_frame = frame_idx + args.event_lock_frames
+                                if args.verbose:
+                                    print(
+                                        f"[event-merge] event_id={pending_event.event_id} "
+                                        f"track={track_id} trigger={frame_idx} "
+                                        f"release={pending_event.release_frame} p_fall={p_fall:.3f}"
+                                    )
+                            continue
+
                         event = PendingEvent(
                             event_id=f"event_{time.strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}",
                             scenario=scenario,
@@ -835,10 +1031,12 @@ def run_client(args: argparse.Namespace) -> None:
                             quality=mean_quality,
                             trigger_reason=trigger_reason,
                             status=status,
+                            last_update_frame=frame_idx,
                         )
                         pending_events.append(event)
                         send_or_print(make_initial_suspected_payload(args=args, event=event), args)
                         state.last_event_frame = frame_idx
+                        state.event_lock_until_frame = frame_idx + args.event_lock_frames
                         if forced:
                             forced_event_sent = True
 
@@ -927,7 +1125,11 @@ def main() -> None:
                         help="Playback FPS for exported evidence clips; detection FPS remains --fps")
     parser.add_argument("--realtime", action="store_true")
     parser.add_argument("--checkpoint", default=str(DEFAULT_3D_CHECKPOINT))
-    parser.add_argument("--threshold-low", type=float, default=0.40)
+    parser.add_argument("--pose-device", default="cpu",
+                        help="YOLO pose device. Default cpu keeps the demo GPU reserved for Qwen3-VL.")
+    parser.add_argument("--classifier-device", default="cpu",
+                        help="3D classifier device. Default cpu avoids GPU contention with Qwen3-VL.")
+    parser.add_argument("--threshold-low", type=float, default=0.075)
     parser.add_argument("--threshold-high", type=float, default=1.0,
                         help="Metadata only in current demo policy; all p_fall >= threshold-low goes to LLM review")
     parser.add_argument("--quality-threshold", type=float, default=0.45)
@@ -937,9 +1139,8 @@ def main() -> None:
     parser.add_argument("--max-speed-rejects", type=int, default=10,
                         help="Accept and resync after this many consecutive speed-gate rejects")
     parser.add_argument("--classify-stride", type=int, default=5)
-    parser.add_argument("--classifier-window-steps", type=int, default=20)
-    parser.add_argument("--classifier-window-subsample", type=int, default=2,
-                        help="Use every Nth feature in the realtime classifier window; training fall windows used 2")
+    parser.add_argument("--classifier-window-steps", type=int, default=40,
+                        help="Consecutive 3D feature frames passed to the classifier")
     parser.add_argument("--max-people", type=int, default=1)
     parser.add_argument("--buffer-frames", type=int, default=600)
     parser.add_argument("--event-pre-frames", type=int, default=90,
@@ -948,7 +1149,12 @@ def main() -> None:
                         help="Frames collected after the trigger before exporting evidence")
     parser.add_argument("--event-clip-frames", type=int, default=241,
                         help="Total evidence clip frames; defaults to 90 pre + 151 post")
-    parser.add_argument("--event-cooldown-frames", type=int, default=300)
+    parser.add_argument("--event-lock-frames", type=int, default=300,
+                        help="After an event episode, keep YOLO/3D/features running but suppress new events")
+    parser.add_argument("--event-merge-frames", type=int, default=180,
+                        help="Allow stronger triggers within this many frames to update one pending event")
+    parser.add_argument("--event-merge-min-probability-delta", type=float, default=0.0,
+                        help="Minimum p_fall increase required to move a pending event trigger")
     parser.add_argument("--clip-dir", default="clips")
     parser.add_argument("--server-url", default="ws://127.0.0.1:8765/ws/events")
     parser.add_argument("--client-id", default="continuous-client-01")
@@ -961,13 +1167,34 @@ def main() -> None:
     parser.set_defaults(llm=True)
     parser.add_argument("--model", default=str(DEFAULT_MODEL))
     parser.add_argument("--mmproj", default=str(DEFAULT_MMPROJ))
-    parser.add_argument("--n-gpu-layers", type=int, default=-1)
-    parser.add_argument("--n-ctx", type=int, default=4096)
+    parser.add_argument("--n-gpu-layers", type=int, default=20)
+    parser.add_argument("--n-ctx", type=int, default=1024)
+    parser.add_argument("--n-batch", type=int, default=256,
+                        help="llama.cpp logical batch size; keep modest on 8GB GPUs")
+    parser.add_argument("--n-ubatch", type=int, default=64,
+                        help="llama.cpp physical micro-batch size; lower values reduce VRAM spikes")
     parser.add_argument("--llm-frame-stride", type=int, default=10)
     parser.add_argument("--llm-max-frames", type=int, default=3)
     parser.add_argument("--llm-sheet-frames", type=int, default=9)
     parser.add_argument("--llm-sheet-stride", type=int, default=29)
+    parser.add_argument("--llm-sheet-tile-width", type=int, default=192,
+                        help="Deprecated; kept for old contact-sheet experiments")
+    parser.add_argument("--llm-pre-samples", type=int, default=4,
+                        help="Single-view LLM samples before the classifier-window center")
+    parser.add_argument("--llm-post-samples", type=int, default=4,
+                        help="Single-view LLM samples after the classifier-window center")
+    parser.add_argument("--llm-temporal-stride", type=int, default=15,
+                        help="Frame stride between single-view LLM samples")
+    parser.add_argument("--llm-image-max-side", type=int, default=192,
+                        help="Downscale each LLM image so its longest side is at most this many pixels")
     parser.add_argument("--llm-min-confidence", type=float, default=0.60)
+    parser.add_argument("--llm-gpu-lock", dest="llm_gpu_lock", action="store_true",
+                        help="Serialize LLM and CUDA YOLO/classifier calls on one GPU")
+    parser.add_argument("--no-llm-gpu-lock", dest="llm_gpu_lock", action="store_false",
+                        help="Allow LLM and CUDA detector/classifier calls to run concurrently")
+    parser.set_defaults(llm_gpu_lock=True)
+    parser.add_argument("--llm-debug-tokens", action="store_true",
+                        help="Print tokenizer counts for the LLM prompts on first review")
     parser.add_argument("--pose-fallback", action="store_true")
     parser.add_argument("--no-send", action="store_true")
     parser.add_argument("--stop-after-event", action="store_true")

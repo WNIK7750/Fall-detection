@@ -53,6 +53,10 @@ try {
         "--event-pre-frames", "90",
         "--event-post-frames", "151",
         "--event-clip-frames", "241",
+        "--pose-device", "cuda",
+        "--classifier-device", "cpu",
+        "--llm-gpu-lock",
+        "--llm-debug-tokens",
         "--llm-sheet-frames", "9",
         "--llm-sheet-stride", "29",
         "--realtime",
@@ -66,6 +70,9 @@ try {
 
     Write-Host "Running live dataset camera loop..."
     & $Python @ArgsList
+    if ($LASTEXITCODE -ne 0) {
+        throw "Dataset camera loop exited with code $LASTEXITCODE"
+    }
     Write-Host ""
     Write-Host "Demo complete. Dashboard remains open while this script is running."
     Write-Host "Press Enter to stop the monitor server."

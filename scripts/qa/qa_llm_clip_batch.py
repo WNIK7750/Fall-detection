@@ -28,7 +28,7 @@ from pipeline.llm_reviewer import (
 )
 
 
-DEFAULT_MODEL = REPO_ROOT / "models" / "llm" / "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
+DEFAULT_MODEL = REPO_ROOT / "models" / "llm" / "Qwen3-VL-4B-Instruct-Q4_K_S.gguf"
 DEFAULT_MMPROJ = REPO_ROOT / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
 
 
@@ -61,8 +61,11 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="Decode/sample only; do not load LLM")
     parser.add_argument("--model", default=str(DEFAULT_MODEL))
     parser.add_argument("--mmproj", default=str(DEFAULT_MMPROJ))
-    parser.add_argument("--n-gpu-layers", type=int, default=-1)
-    parser.add_argument("--n-ctx", type=int, default=4096)
+    parser.add_argument("--n-gpu-layers", type=int, default=20)
+    parser.add_argument("--n-ctx", type=int, default=1024)
+    parser.add_argument("--n-batch", type=int, default=256)
+    parser.add_argument("--n-ubatch", type=int, default=64)
+    parser.add_argument("--llm-image-max-side", type=int, default=192)
     parser.add_argument("--output", default=None, help="Optional JSON output file")
     args = parser.parse_args()
 
@@ -78,6 +81,9 @@ def main() -> None:
             mmproj_path=args.mmproj,
             n_ctx=args.n_ctx,
             n_gpu_layers=args.n_gpu_layers,
+            n_batch=args.n_batch,
+            n_ubatch=args.n_ubatch,
+            max_image_side=args.llm_image_max_side,
         )
         if not reviewer.ready:
             raise SystemExit("LLM reviewer failed to load")

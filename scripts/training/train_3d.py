@@ -31,6 +31,8 @@ sys.path.insert(0, str(REPO_ROOT))
 from models.enhanced_lstm import EnhancedFallDetector
 from pipeline.classifier import FallClassifier
 
+EXPECTED_SEQUENCE_LENGTH = 40
+
 
 # ---------------------------------------------------------------------------
 # Focal Loss (binary)
@@ -51,7 +53,7 @@ class FocalLoss(nn.Module):
 # ---------------------------------------------------------------------------
 # Reproducibility
 # ---------------------------------------------------------------------------
-def set_seed(seed: int = 42):
+def set_seed(seed: int = 20260713):
     """Fix random seeds for reproducible training."""
     random.seed(seed)
     np.random.seed(seed)
@@ -80,6 +82,15 @@ def train(args):
     y_val = np.load(feats_dir / "val" / "y.npy")
 
     N, F, T = X_train.shape
+    if T != EXPECTED_SEQUENCE_LENGTH:
+        raise ValueError(
+            f"Expected {EXPECTED_SEQUENCE_LENGTH}-frame training windows, got {T}. "
+            "Regenerate features with scripts/training/extract_dataset_3d.py."
+        )
+    if X_val.ndim != 3 or X_val.shape[1:] != (F, T):
+        raise ValueError(
+            f"Validation shape {X_val.shape} does not match training feature shape (*, {F}, {T})."
+        )
     print(f"\nData: train={N} val={len(y_val)}, shape=({F},{T}), "
           f"fall_ratio={y_train.mean():.1%}")
     print(f"  Train class dist: 0={int((y_train==0).sum())}  1={int((y_train==1).sum())}")
@@ -107,7 +118,7 @@ def train(args):
     # SMOTE oversampling (flatten windows for SMOTE)
     if args.smote:
         X_flat = X_train_scaled.reshape(N, -1)
-        sm = SMOTE(random_state=42)
+        sm = SMOTE(random_state=args.seed if args.seed is not None else 20260713)
         X_res, y_res = sm.fit_resample(X_flat, y_train)
         X_train_scaled = X_res.reshape(-1, T, F)
         y_train = y_res
@@ -216,6 +227,7 @@ def train(args):
                 "scaler_mean": scaler.mean_,
                 "scaler_scale": scaler.scale_,
                 "input_size": F,
+                "sequence_length": T,
                 "epoch": epoch,
                 "val_loss": val_loss_epoch,
                 "f1": f1,
@@ -240,17 +252,30 @@ def train(args):
             "scaler_mean": scaler.mean_,
             "scaler_scale": scaler.scale_,
             "input_size": F,
+            "sequence_length": T,
             "epoch": epoch,
             "val_loss": val_loss_epoch,
             "f1": f1,
             "auc": auc,
         }, best_path)
 
+    best_checkpoint = torch.load(best_path, map_location=device, weights_only=False)
+    model.load_state_dict(best_checkpoint["model_state_dict"])
+    model.eval()
+    print(
+        f"Reloaded best checkpoint from epoch {best_checkpoint.get('epoch')} "
+        f"for final test evaluation"
+    )
+
     # Test set evaluation
     test_path = feats_dir / "test" / "X.npy"
     if test_path.exists() and test_path.stat().st_size > 128:
         X_test = np.load(test_path)
         y_test = np.load(feats_dir / "test" / "y.npy")
+        if X_test.ndim != 3 or X_test.shape[1:] != (F, T):
+            raise ValueError(
+                f"Test shape {X_test.shape} does not match training feature shape (*, {F}, {T})."
+            )
         print(f"\n=== Test Set ({run_name}) ===")
         print(f"  Samples: {len(y_test)}, fall ratio: {y_test.mean():.1%}")
 

@@ -270,7 +270,7 @@ if __name__ == "__main__":
 
     # 全量模型（10维特征）
     model_full = build_enhanced_model(input_size=10, model_type='full')
-    x = torch.randn(4, 20, 10)  # [batch=4, seq=20, feat=10]
+    x = torch.randn(4, 40, 10)  # [batch=4, seq=40, feat=10]
     out = model_full(x)
     print(f"Full模型输出: {out.shape}")  # [4, 2]
     print(f"Full模型参数量: {sum(p.numel() for p in model_full.parameters()):,}")
@@ -283,7 +283,7 @@ if __name__ == "__main__":
 
     # 全量模型（20维特征）
     model_full_20 = build_enhanced_model(input_size=20, model_type='full')
-    x20 = torch.randn(4, 20, 20)  # [batch=4, seq=20, feat=20]
+    x20 = torch.randn(4, 40, 20)  # [batch=4, seq=40, feat=20]
     out20 = model_full_20(x20)
     print(f"Full模型(20维)输出: {out20.shape}")
     print(f"Full模型(20维)参数量: {sum(p.numel() for p in model_full_20.parameters()):,}")
