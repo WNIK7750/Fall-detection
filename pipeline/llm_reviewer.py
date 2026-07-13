@@ -83,27 +83,77 @@ Example output:
 """
 
 
-MULTIVIEW_CONTACT_SHEET_PROMPT = """You are an AI safety reviewer for an elderly fall detection system.
+MULTIVIEW_CONTACT_SHEET_PROMPT = """你是一个老年人居家跌倒检测系统的AI安全审核员。你的判断直接影响是否向社区工作人员发送紧急警报。
 
-You will be shown 9 contact-sheet images from 3 synchronized surveillance
-cameras (3 sheets per camera). Each contact sheet is a 3x3 grid of 9 ordered
-frames arranged left-to-right, top-to-bottom as a timeline. Across the 3 sheets
-per camera, observe the person's full movement trajectory.
+## 你的任务
 
-Judge whether the person transitions into a fall-risk / collapsed posture, or
-remains clearly in normal daily activity. Prefer safety: if one or more clear
-views show a person transitioning to lying, prone, or collapsed on the floor or
-a mat, mark it as a fall.
+你会看到9张九宫格图片，来自3个同步的居家监控摄像头（cam1、cam4、cam7，每个摄像头3张九宫格）。
+每张九宫格是一个3x3的网格，包含9帧按时间顺序排列的图像（从左到右、从上到下）。
 
-Output your judgment as a JSON object with exactly these fields:
-- "is_fall": true or false
-- "confidence": a number from 0.0 to 1.0
-- "reason": a brief 1-2 sentence explanation in English
+### 采样方式
+- 每路摄像头共27帧，以3帧为间隔采样（跨度约2.6秒）
+- 每9帧打包为一张九宫格，3路摄像头各3张，共9张九宫格
+- 所有画面由YOLO姿态检测和3D分类器预筛选，已标记为可疑时间窗口
 
-IMPORTANT: Only output the JSON object, nothing else.
+### 观察重点
+请从所有视角综合分析人物的完整运动过程，关注以下方面：
 
-Example output:
-{{"is_fall": true, "confidence": 0.92, "reason": "Across the views, the person transitions from upright to lying on the mat."}}
+1. **运动速度与节奏**：人物的下降是缓慢可控的，还是突然加速的？
+2. **身体控制**：下降过程中身体是否保持平衡？有没有手臂挥舞、支撑或抓握动作？
+3. **重心变化**：重心下降是平缓的（阶梯式）还是急剧的（自由落体式）？
+4. **最终姿态**：人物最终处于什么姿态（站立/端坐/侧躺/俯卧/仰卧/跪姿）？能否自行恢复直立？
+5. **多视角一致性**：多个摄像头是否一致显示同一行为？注意遮挡和可见性问题。
+
+## ⚠️ 数据集特征
+
+这是MCFD（Multiple Cameras Fall Dataset）模拟摔倒数据集。
+受试者会在白色防摔垫、沙发、软垫等缓冲表面上模拟真实摔倒。
+**请根据动作质量而非落点来判断**：
+
+### 判定为摔倒（is_fall: true）的关键特征：
+- 下降动作突然、不受控、速度快
+- 身体明显倾斜或坍塌，躯干从竖直变为水平
+- 手臂向前伸出支撑、挥舞或试图抓住物体
+- 双腿失去支撑力、膝盖弯曲后坐倒
+- 最终姿态为躺卧（侧躺、俯卧、仰卧）而非端坐
+- **即使最终落在沙发、垫子等软表面上，只要动作失控就是摔倒**
+
+### 非摔倒（is_fall: false）的典型场景：
+- 缓慢、可控地坐下（手扶扶手、躯干保持直立、最终端坐）
+- 弯腰捡东西后迅速恢复直立
+- 蹲下后保持稳定并可能站起
+- 正常的行走、站立、转身等日常活动
+
+### 关键区分示例：
+| 场景 | 判断 | 原因 |
+|------|------|------|
+| 快速坍塌到沙发上，最终躺卧 | 摔倒 | 速度失控，躯干水平 |
+| 缓慢坐下到沙发上，最终端坐 | 非摔倒 | 速度可控，躯干直立 |
+| 站在垫子上突然跌倒，四肢着垫 | 摔倒 | 动作突然，有摔倒特征 |
+| 从站立平稳蹲下，后站起 | 非摔倒 | 全程可控，恢复直立 |
+
+## 输出格式
+
+只输出一个合法的JSON对象，不要有任何markdown标记、解释或其他文字：
+
+```json
+{"is_fall": true或false, "confidence": 0.0到1.0之间的数字, "reason": "中文1-3句话的判断依据"}
+```
+
+### confidence指导：
+- 0.9-1.0：多视角清晰证据，无歧义
+- 0.7-0.9：有明确证据但部分视角遮挡
+- 0.5-0.7：证据存在但不够明确，偏保守判断
+- 低于0.5：几乎无法判断，请尽量给出确定性结论
+
+### reason要求：
+用中文简要说明核心判断依据，引用具体观察（如"人物在第5-7帧之间突然失去平衡，躯干快速从竖直变为水平"）。
+
+## 安全原则
+
+这是一个安全关键系统。误判正常活动为摔倒会增加社区工作人员的负担，
+但漏判真正的摔倒可能导致老人无法及时获得救助。
+**当证据不明确但存在可疑迹象时，优先判定为摔倒。**
 """
 
 
@@ -154,65 +204,59 @@ IMPORTANT: Only output the JSON object, nothing else.
 """
 
 
-CONTEXT_FALL_REVIEW_PROMPT = """You are an AI safety reviewer for an elderly fall detection system.
+CONTEXT_FALL_REVIEW_PROMPT = """你是一个老年人跌倒检测系统的AI安全审核员。
 
-You will be shown {n_frames} keyframe images from a multi-camera surveillance video.
-These images are shown only after a separate 3D fall classifier has already
-flagged the time window as suspicious. Your task is to decide whether the
-visual evidence is fall-risk/abnormal posture OR clearly normal daily activity.
+你会看到{n_frames}张来自多摄像头监控视频的关键帧图片。
+这些图片是在3D跌倒分类器已将此时间段标记为可疑后才显示的。
+你的任务是判断视觉证据是跌倒风险/异常姿态，还是明显的正常日常活动。
 
-The MCFD demo scene uses a white crash mat / soft landing pad for staged falls.
-Treat a person who is horizontal, reclined sideways, prone, supine, or motionless
-on that mat or on the floor as "is_fall": true. Do not dismiss it as controlled
-resting unless the person is clearly sitting upright on a chair/sofa or walking.
-Prefer catching a fall-risk event over dismissing a suspicious posture.
+⚠️ MCFD是一个模拟摔倒数据集，受试者使用白色防摔垫/软着陆表面进行模拟摔倒。
+人物横向、侧躺、俯卧、仰卧或静止在垫子/地板上都应判为"is_fall": true。
+不要将其当作可控的休息动作，除非人物明显正坐在椅子/沙发上或正在行走。
+漏判跌倒比误判更危险，请优先捕获跌倒事件。
 
-Output your judgment as a JSON object with exactly these fields:
-- "is_fall": true or false (whether a fall event is occurring)
-- "confidence": a number from 0.0 to 1.0 indicating your certainty
-- "reason": a brief explanation in English, 1-2 sentences
+输出一个JSON对象，只包含以下字段：
+- "is_fall": true 或 false（是否发生跌倒）
+- "confidence": 0.0到1.0之间的数字
+- "reason": 中文1-2句话的简要解释
 
-IMPORTANT: Only output the JSON object, nothing else. Do not add any other text.
+⚠️ 重要：只输出JSON对象，不要有任何其他文字。
 
-Example output:
-{{"is_fall": true, "confidence": 0.92, "reason": "Person is lying on floor."}}
+示例：{{"is_fall": true, "confidence": 0.92, "reason": "人物从直立快速坍塌到垫子上，手臂支撑，动作失控。"}}
 
-Positive examples for "is_fall": true:
-- Person is lying sideways or supine on a white floor mat/cushion.
-- Person has transitioned from upright to collapsed/reclined posture.
+is_fall为true的正例：
+- 人物侧躺或仰卧在白色地垫/缓冲垫上
+- 人物从直立过渡到坍塌/后仰姿态
 
-Negative examples for "is_fall": false:
-- Person is standing, walking, or sitting upright normally.
-- Person is seated upright on a sofa/chair without collapse.
+is_fall为false的反例：
+- 人物正常站立、行走或笔直坐着
+- 人物端坐在沙发/椅子上，没有坍塌动作
 
-System evidence from YOLO + 3D reconstruction:
+YOLO + 3D重建的系统证据：
 {evidence}
 """
 
-SYSTEM_PROMPT = "You are a computer vision safety reviewer. Always respond with valid JSON only."
+SYSTEM_PROMPT = "你是一个专业的计算机视觉安全审核员，专门为老年人居家跌倒检测系统工作。你的任务是仔细分析监控画面中的人物行为，判断是否发生跌倒事件。你必须始终只输出合法的JSON格式，不要添加任何其他内容，不要使用markdown代码块包裹JSON。"
 
-RETRY_FORMAT_PROMPT_1 = """Your previous response could not be parsed or did not contain a clear fall judgment.
-You MUST output ONLY a single JSON object — no markdown, no explanation, no other text.
-The JSON must have exactly these three fields:
-- "is_fall": true or false
-- "confidence": a number from 0.0 to 1.0
-- "reason": a brief 1-2 sentence explanation
+RETRY_FORMAT_PROMPT_1 = """你上一次的回答无法被解析为合法的JSON。
+请重新观察图片。基于你之前的分析（见下方），只输出一个合法的JSON对象，
+不要有任何markdown、解释或其他文字：
+{{"is_fall": true/false, "confidence": 0.0-1.0, "reason": "简要说明"}}
 
-Based on your previous analysis below, extract the final judgment:
-
+之前的分析：
 {previous_output}
 """
 
-RETRY_FORMAT_PROMPT_2 = """Two attempts have failed to produce a valid JSON response.
-This is your last chance. Using the two analyses below, output EXACTLY one JSON object:
-{{"is_fall": true/false, "confidence": 0.0-1.0, "reason": "summary"}}
-If the evidence is unclear, default to "is_fall": true for safety.
-NO markdown. NO extra text. ONLY the JSON object.
+RETRY_FORMAT_PROMPT_2 = """两次尝试都未能生成合法的JSON。
+这是最后一次机会。综合以下两次分析，严格输出一个JSON对象：
+{{"is_fall": true/false, "confidence": 0.0-1.0, "reason": "总结"}}
+如果证据不明确，出于安全考虑默认输出"is_fall": true。
+不要有任何markdown、不要有其他文字。只输出JSON。
 
-First analysis:
+第一次分析：
 {output_1}
 
-Second analysis:
+第二次分析：
 {output_2}
 """
 
@@ -456,11 +500,12 @@ class LLMFallReviewer:
         if self._is_valid_fall_result(result):
             return result
 
-        # --- Retry 1: format enforcement, text-only (no images) ---
+        # --- Retry 1: with images + previous output + format enforcement ---
         raw_1 = result.get("raw_response", "")
-        retry_1 = self.complete_text_json(
-            RETRY_FORMAT_PROMPT_1.format(previous_output=raw_1),
-            max_tokens=192,
+        retry_prompt = MULTIVIEW_CONTACT_SHEET_PROMPT + "\n\n" + RETRY_FORMAT_PROMPT_1.format(previous_output=raw_1)
+        retry_1 = self.review(
+            sheets,
+            prompt_text=retry_prompt,
         )
         retry_1["raw_response"] = retry_1.get("raw_response", "")
         if self._is_valid_fall_result(retry_1):
