@@ -13,7 +13,7 @@ Predictable dashboard demo:
     python playmode_event_loop.py --source-video clips/s01_1050_90.mp4 --server-url ws://127.0.0.1:8765/ws/events
 
 No server smoke:
-    python playmode_event_loop.py --no-send --max-frames 120
+    python playmode_event_loop.py --no-send --no-llm --max-frames 120
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ import json
 import time
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import cv2
 import numpy as np
@@ -161,7 +162,31 @@ def run_playmode(args: argparse.Namespace) -> None:
 
         clip_path: str | None = None
         final_status = initial_status
+        event_id = f"event_{time.strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
         if initial_status == "suspected":
+            initial_payload = build_event_payload(
+                client_id=args.client_id,
+                device_id=args.device_id,
+                address=args.address,
+                status="suspected",
+                p_fall=p_fall,
+                threshold_low=args.threshold_low,
+                threshold_high=args.threshold_high,
+                clip_path=None,
+                scenario=None,
+                frame_index=frame_index,
+                track_id=0,
+                quality=0.88,
+                llm_review={
+                    "status": "pending_review",
+                    "is_fall": None,
+                    "confidence": None,
+                    "reason": "Suspected fall detected by scripted playmode; preparing 90-frame clip for LLM review.",
+                },
+                trigger_reason=f"playmode scripted {initial_status} at frame {frame_index}",
+                event_id=event_id,
+            )
+            send_or_print(initial_payload, args)
             output = make_event_clip_path(args.clip_dir, "suspected")
             clip_path = buffer.export_latest(output, frames=args.event_clip_frames, fps=args.fps)
             if clip_path is None:
@@ -200,6 +225,7 @@ def run_playmode(args: argparse.Namespace) -> None:
             quality=0.88,
             llm_review=llm_review,
             trigger_reason=f"playmode scripted {initial_status} at frame {frame_index}",
+            event_id=event_id,
         )
         send_or_print(payload, args)
         trigger_sent = True
@@ -226,7 +252,11 @@ def main() -> None:
     parser.add_argument("--client-id", default="playmode-client-01")
     parser.add_argument("--device-id", default="no-camera-playmode")
     parser.add_argument("--address", default="Demo Community / playmode loop")
-    parser.add_argument("--llm", action="store_true")
+    parser.add_argument("--llm", dest="llm", action="store_true",
+                        help="Enable LLM review for suspected events (default)")
+    parser.add_argument("--no-llm", dest="llm", action="store_false",
+                        help="Disable LLM review for fast smoke tests")
+    parser.set_defaults(llm=True)
     parser.add_argument("--model", default=str(DEFAULT_MODEL))
     parser.add_argument("--mmproj", default=str(DEFAULT_MMPROJ))
     parser.add_argument("--n-gpu-layers", type=int, default=-1)

@@ -124,15 +124,44 @@
       color: #ffffff;
     }
 
+    .columns {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .column {
+      min-width: 0;
+    }
+
+    .column-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .column-header h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .column-count {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
     .events {
       display: grid;
-      gap: 12px;
+      gap: 10px;
     }
 
     .event {
       display: grid;
-      grid-template-columns: 280px minmax(0, 1fr) 180px;
-      gap: 16px;
+      grid-template-columns: 180px minmax(0, 1fr);
+      gap: 12px;
       align-items: stretch;
       background: var(--panel);
       border: 1px solid var(--line);
@@ -219,11 +248,12 @@
 
     .event-actions {
       display: flex;
-      flex-direction: column;
+      align-items: center;
       justify-content: space-between;
       gap: 8px;
-      border-left: 1px solid var(--line);
-      padding-left: 14px;
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+      grid-column: 1 / -1;
     }
 
     .probability {
@@ -259,16 +289,14 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
+      .columns {
+        grid-template-columns: 1fr;
+      }
+
       .event {
         grid-template-columns: 1fr;
       }
 
-      .event-actions {
-        border-left: 0;
-        border-top: 1px solid var(--line);
-        padding-left: 0;
-        padding-top: 12px;
-      }
     }
   </style>
 </head>
@@ -291,13 +319,33 @@
       <button id="reloadButton">Reload</button>
     </div>
 
-    <section id="events" class="events">
-      <div class="empty">No events yet. Start the monitor server and run the demo sender or detector client.</div>
+    <section class="columns">
+      <div class="column">
+        <div class="column-header">
+          <h3>Suspected</h3>
+          <span id="suspectedColumnCount" class="column-count">0 active</span>
+        </div>
+        <div id="suspectedEvents" class="events">
+          <div class="empty">No suspected events.</div>
+        </div>
+      </div>
+      <div class="column">
+        <div class="column-header">
+          <h3>Fall</h3>
+          <span id="fallColumnCount" class="column-count">0 active</span>
+        </div>
+        <div id="fallEvents" class="events">
+          <div class="empty">No fall alerts.</div>
+        </div>
+      </div>
     </section>
   </main>
 
   <script>
-    const eventsEl = document.getElementById('events');
+    const suspectedEventsEl = document.getElementById('suspectedEvents');
+    const fallEventsEl = document.getElementById('fallEvents');
+    const suspectedColumnCountEl = document.getElementById('suspectedColumnCount');
+    const fallColumnCountEl = document.getElementById('fallColumnCount');
     const dotEl = document.getElementById('dot');
     const connectionTextEl = document.getElementById('connectionText');
     const reloadButton = document.getElementById('reloadButton');
@@ -345,12 +393,19 @@
       counts.fall.textContent = events.filter((event) => event.status === 'fall').length;
       counts.suspected.textContent = events.filter((event) => event.status === 'suspected').length;
 
-      if (!events.length) {
-        eventsEl.innerHTML = '<div class="empty">No events yet. Start the monitor server and run the demo sender or detector client.</div>';
-        return;
-      }
+      const suspectedEvents = events.filter((event) => event.status === 'suspected' && !event.handled);
+      const fallEvents = events.filter((event) => event.status === 'fall' && !event.handled);
+      suspectedColumnCountEl.textContent = `${suspectedEvents.length} active`;
+      fallColumnCountEl.textContent = `${fallEvents.length} active`;
+      suspectedEventsEl.innerHTML = renderList(suspectedEvents, 'No suspected events.');
+      fallEventsEl.innerHTML = renderList(fallEvents, 'No fall alerts.');
+    }
 
-      eventsEl.innerHTML = events.map((event) => {
+    function renderList(list, emptyText) {
+      if (!list.length) {
+        return `<div class="empty">${escapeHtml(emptyText)}</div>`;
+      }
+      return list.map((event) => {
         const status = event.status || 'suspected';
         const llm = event.llm_review || {};
         const classifier = event.classifier || {};
@@ -425,7 +480,7 @@
       };
     }
 
-    eventsEl.addEventListener('click', (event) => {
+    document.addEventListener('click', (event) => {
       const button = event.target.closest('[data-handle]');
       if (button) markHandled(button.dataset.handle);
     });

@@ -115,9 +115,25 @@ async def broadcast(message: dict[str, Any]) -> None:
 
 
 async def add_event(payload: dict[str, Any]) -> dict[str, Any]:
-    event = normalize_event(payload)
-    events.insert(0, event)
-    del events[MAX_EVENTS:]
+    incoming = normalize_event(payload)
+    existing = next((event for event in events if event.get("event_id") == incoming.get("event_id")), None)
+    if existing is None:
+        event = incoming
+        events.insert(0, event)
+        del events[MAX_EVENTS:]
+    else:
+        handled = existing.get("handled", False)
+        handled_at = existing.get("handled_at")
+        first_timestamp = existing.get("timestamp")
+        updated_at = incoming.get("timestamp", now_iso())
+        existing.update(incoming)
+        if first_timestamp:
+            existing["timestamp"] = first_timestamp
+        existing["updated_at"] = updated_at
+        existing["handled"] = handled
+        if handled_at:
+            existing["handled_at"] = handled_at
+        event = existing
     await broadcast({"type": "event", "event": event})
     return event
 

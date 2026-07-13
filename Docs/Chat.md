@@ -145,7 +145,8 @@
     WebSocket.
   - `continuous_event_client.py` runs current MCFD videos as virtual three
     camera streams through YOLO -> tracking -> 3D reconstruction -> classifier
-    -> event trigger -> optional LLM clip review -> WebSocket event.
+    -> event trigger -> automatic LLM clip review for suspected events ->
+    WebSocket event.
   - `playmode_event_loop.py` demonstrates the same event loop without physical
     cameras, YOLO, 3D, or classifier. It replays an existing clip or generates
     synthetic frames, then exercises rolling buffer, 90-frame export, optional
@@ -158,8 +159,12 @@
     directly to `fall` with an explanatory LLM/status reason.
 - Trigger behavior:
   - `p_fall >= 0.40` -> direct `fall`, LLM skipped.
-  - `0.30 <= p_fall < 0.40` -> suspected, export clip, then optional LLM review.
-  - LLM-confirmed fall upgrades final event status to `fall`.
+  - `0.30 <= p_fall < 0.40` -> send an immediate `suspected` event without
+    video, export clip, then LLM review by default.
+  - LLM-confirmed fall sends a second update with the same `event_id`, upgrading
+    final event status to `fall`.
+  - Use `--no-llm` only for fast smoke tests or machines that cannot load the
+    VL model.
   - Cooldown defaults to 300 frames to avoid repeated alerts.
 - Temporal tracking gate:
   - Per-person state tracks recent features, 3D skeletons, qualities, centroids,
@@ -169,7 +174,7 @@
   - Because MCFD calibration is approximate, the gate uses adaptive motion
     limits instead of hard-coded physical `g` thresholds.
 - Smoke tests passed:
-  - `python playmode_event_loop.py --no-send --source-video clips/s01_1050_90.mp4 --trigger-frame 100 --max-frames 120`
+  - `python playmode_event_loop.py --no-send --no-llm --source-video clips/s01_1050_90.mp4 --trigger-frame 100 --max-frames 120`
     exported a 90-frame clip and printed a standard suspected event.
   - `python continuous_event_client.py --scenario 1 --max-frames 80 --force-trigger-frame 40 --force-p-fall 0.35 --event-clip-frames 30 --no-send --stop-after-event --log-every 20`
     ran real MCFD three-view YOLO/3D/client loop and emitted a forced suspected
@@ -179,13 +184,20 @@
   - End-to-end monitor smoke passed with `playmode_event_loop.py` sending a
     WebSocket event to `monitor_server.py`; `/api/events` returned the event
     with `/clips/...` preview URL.
-  - `python playmode_event_loop.py --no-send --llm --source-video clips/s01_1050_90.mp4 --trigger-frame 100 --max-frames 120`
+  - Split-event smoke passed: monitor receives immediate suspected update and
+    final LLM update with the same `event_id`; server upserts instead of
+    showing duplicates.
+  - `python playmode_event_loop.py --no-send --source-video clips/s01_1050_90.mp4 --trigger-frame 100 --max-frames 120`
     exported 90 frames, Qwen3-VL-4B reviewed the clip, and upgraded suspected
     to `fall` with confidence 0.95.
+  - Dashboard auto-refreshes through `ws://.../ws/dashboard`; the Reload button
+    is only a manual fallback for reconnect/debug.
+  - Dashboard layout is two columns for horizontal displays: left active
+    `suspected`, right active `fall`.
 - Recommended no-camera roadshow command:
   - Terminal A: `python monitor_server.py --host 127.0.0.1 --port 8765`
   - Browser: `http://127.0.0.1:8765/`
-  - Terminal B: `python playmode_event_loop.py --source-video clips/s01_1050_90.mp4 --server-url ws://127.0.0.1:8765/ws/events --llm`
+  - Terminal B: `python playmode_event_loop.py --source-video clips/s01_1050_90.mp4 --server-url ws://127.0.0.1:8765/ws/events`
 
 ### Safe from Git (large files)
 - `features/3d/` — generated .npy for training (.gitignore)

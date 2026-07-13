@@ -10,7 +10,7 @@ Run monitor first:
     python monitor_server.py --host 127.0.0.1 --port 8765
 
 Fast smoke without LLM / without sending:
-    python continuous_event_client.py --scenario 1 --max-frames 180 --force-trigger-frame 120 --no-send
+    python continuous_event_client.py --scenario 1 --max-frames 180 --force-trigger-frame 120 --no-send --no-llm
 
 Roadshow-style event to dashboard:
     python continuous_event_client.py --scenario 1 --server-url ws://127.0.0.1:8765/ws/events --force-trigger-frame 120
@@ -26,6 +26,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import cv2
 import numpy as np
@@ -189,7 +190,7 @@ def send_or_print(payload: dict[str, Any], args: argparse.Namespace) -> None:
     print(f"[event:sent] ack={ack}")
 
 
-def emit_event_from_buffer(
+def build_event_sequence_from_buffer(
     *,
     args: argparse.Namespace,
     clip_buffer: RollingClipBuffer,
@@ -201,14 +202,43 @@ def emit_event_from_buffer(
     status: str,
     quality: float | None,
     trigger_reason: str,
-) -> dict[str, Any]:
-    """Create clip/review/payload for one trigger using the shared P0 policy."""
+) -> list[dict[str, Any]]:
+    """Create one or more payloads for a trigger using the shared P0 policy.
+
+    Suspected events are intentionally split:
+      1. immediate suspected alert without video, so staff sees it at once
+      2. final update with clip/LLM result using the same event_id
+    """
     clip_path: str | None = None
     llm_review: dict[str, Any] | None = None
     final_status = status
     output_dir = Path(args.clip_dir)
+    event_id = f"event_{time.strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
+    payloads: list[dict[str, Any]] = []
 
     if status == "suspected":
+        payloads.append(build_event_payload(
+            client_id=args.client_id,
+            device_id=args.device_id,
+            address=args.address,
+            status="suspected",
+            p_fall=p_fall,
+            threshold_low=args.threshold_low,
+            threshold_high=args.threshold_high,
+            clip_path=None,
+            scenario=scenario,
+            frame_index=frame_index,
+            track_id=track_id,
+            quality=quality,
+            llm_review={
+                "status": "pending_review",
+                "is_fall": None,
+                "confidence": None,
+                "reason": "Suspected fall detected by 3D classifier; preparing 90-frame clip for LLM review.",
+            },
+            trigger_reason=trigger_reason,
+            event_id=event_id,
+        ))
         output_path = make_clip_path(scenario, frame_index, status, output_dir)
         clip_path = clip_buffer.export_latest(output_path, frames=args.event_clip_frames, fps=args.fps)
         if clip_path is None:
@@ -236,7 +266,7 @@ def emit_event_from_buffer(
             "reason": "3D classifier probability exceeded high threshold; LLM skipped.",
         }
 
-    return build_event_payload(
+    payloads.append(build_event_payload(
         client_id=args.client_id,
         device_id=args.device_id,
         address=args.address,
@@ -251,7 +281,9 @@ def emit_event_from_buffer(
         quality=quality,
         llm_review=llm_review,
         trigger_reason=trigger_reason,
-    )
+        event_id=event_id,
+    ))
+    return payloads
 
 
 def run_client(args: argparse.Namespace) -> None:
@@ -375,7 +407,7 @@ def run_client(args: argparse.Namespace) -> None:
                     f"classifier p_fall={p_fall:.3f}; status={status}; "
                     f"quality={mean_quality:.2f}; {gate_reason}"
                 )
-                payload = emit_event_from_buffer(
+                payloads = build_event_sequence_from_buffer(
                     args=args,
                     clip_buffer=clip_buffer,
                     reviewer=reviewer,
@@ -387,7 +419,8 @@ def run_client(args: argparse.Namespace) -> None:
                     quality=mean_quality,
                     trigger_reason=trigger_reason,
                 )
-                send_or_print(payload, args)
+                for payload in payloads:
+                    send_or_print(payload, args)
                 state.last_event_frame = frame_idx
                 if forced:
                     forced_event_sent = True
@@ -404,7 +437,7 @@ def run_client(args: argparse.Namespace) -> None:
             ):
                 p_fall = args.force_p_fall
                 status = status_from_probability(p_fall, args.threshold_low, args.threshold_high)
-                payload = emit_event_from_buffer(
+                payloads = build_event_sequence_from_buffer(
                     args=args,
                     clip_buffer=clip_buffer,
                     reviewer=reviewer,
@@ -416,7 +449,8 @@ def run_client(args: argparse.Namespace) -> None:
                     quality=None,
                     trigger_reason="forced trigger before classifier produced a window",
                 )
-                send_or_print(payload, args)
+                for payload in payloads:
+                    send_or_print(payload, args)
                 forced_event_sent = True
                 if args.stop_after_event:
                     elapsed = time.time() - start_time
@@ -453,7 +487,11 @@ def main() -> None:
     parser.add_argument("--client-id", default="continuous-client-01")
     parser.add_argument("--device-id", default="mcfd-camset-1-4-7")
     parser.add_argument("--address", default="Demo Community / MCFD virtual cameras")
-    parser.add_argument("--llm", action="store_true")
+    parser.add_argument("--llm", dest="llm", action="store_true",
+                        help="Enable LLM review for suspected events (default)")
+    parser.add_argument("--no-llm", dest="llm", action="store_false",
+                        help="Disable LLM review for fast smoke tests")
+    parser.set_defaults(llm=True)
     parser.add_argument("--model", default=str(DEFAULT_MODEL))
     parser.add_argument("--mmproj", default=str(DEFAULT_MMPROJ))
     parser.add_argument("--n-gpu-layers", type=int, default=-1)
