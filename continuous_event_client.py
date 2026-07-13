@@ -44,7 +44,7 @@ from pipeline.video_reader import MCFDReader
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_3D_CHECKPOINT = BASE_DIR / "checkpoints" / "enhanced_3d_20260712_185406" / "best_model.pth"
+DEFAULT_3D_CHECKPOINT = BASE_DIR / "checkpoints" / "archive" / "enhanced_3d_20260712_185406" / "best_model.pth"
 DEFAULT_MODEL = BASE_DIR / "models" / "llm" / "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
 DEFAULT_MMPROJ = BASE_DIR / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
 

@@ -15,6 +15,7 @@ from pipeline.classifier import FallClassifier
 
 DEFAULT_CHECKPOINT = os.path.join(
     "checkpoints",
+    "archive",
     "enhanced_3d_20260712_185406",
     "best_model.pth",
 )

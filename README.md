@@ -84,6 +84,81 @@ pip install -r requirements.txt
 
 ## 🚀 快速开始
 
+### Roadshow Demo（当前推荐）
+
+当前路演 demo 使用 MCFD 数据集视频模拟三路居家摄像头输入，不需要现场连接真实摄像头。核心链路为：
+
+```text
+三路视频/Playmode → YOLOv8 Pose → 3D 重建 → 3D 分类器
+    → suspected/fall 事件 → 本地 Qwen3-VL clip 复核 → 社区监控端 WebSocket 看板
+```
+
+**隐私机制：** 摄像头画面优先在老人家中本地处理。客户端只在 `fall` 或 `suspected` 事件需要社区工作人员介入时发送事件；疑似事件会先发送不含视频的告警，随后仅导出最近 90 帧短片段给本地/社区复核链路使用。系统不会持续上传或落盘完整视频流。
+
+#### 1. 启动社区监控端
+
+```bash
+python monitor_server.py --host 127.0.0.1 --port 8765
+```
+
+浏览器打开：
+
+```text
+http://127.0.0.1:8765/
+```
+
+监控页面通过 WebSocket 自动刷新；`Manual Sync`/`Reload` 类按钮只作为断线或调试时的手动同步。
+
+#### 2. 无摄像头演示主循环（最稳）
+
+```bash
+python playmode_event_loop.py --source-video clips/s01_1050_90.mp4 --server-url ws://127.0.0.1:8765/ws/events
+```
+
+预期流程：
+- 左列先出现 `suspected`，不带视频，只显示 3D classifier probability。
+- Qwen3-VL 复核 90 帧 clip 后，同一事件更新为 `fall` 并移动到右列。
+- 事件视频预览出现后，工作人员可以点击 `Mark handled`。
+
+快速 smoke test（不加载 LLM、不发送到 dashboard）：
+
+```bash
+python playmode_event_loop.py --no-send --no-llm --source-video clips/s01_1050_90.mp4 --trigger-frame 100 --max-frames 120
+```
+
+#### 3. MCFD 三路视频连续客户端
+
+```bash
+python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-frame 100 --force-p-fall 0.35 --server-url ws://127.0.0.1:8765/ws/events --stop-after-event
+```
+
+快速 smoke test：
+
+```bash
+python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-frame 100 --force-p-fall 0.35 --no-llm --no-send --stop-after-event
+```
+
+#### 4. LLM clip 复核单测
+
+```bash
+python review_llm_clip.py --video clips/s01_1050_90.mp4
+python qa_llm_clip_batch.py --videos clips/s01_1050_90.mp4 clips/s01_0000_90_normal.mp4
+```
+
+#### 当前 3D checkpoint 与阈值
+
+- Checkpoint: `checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth`
+- Test AUC-ROC: `0.9747`（MCFD 3D features test split）
+- Low threshold: `0.30` → suspected，触发 90 帧 clip 复核
+- High threshold: `0.40` → direct fall alert，跳过 LLM
+
+#### 当前 demo 边界
+
+- MCFD 视频文件用于模拟三路摄像头；真实摄像头接入属于后续 adapter 工作。
+- MCFD 相机标定/3D 重建采用 demo 可用的近似方案，适合路演展示核心链路，不等同于生产级标定流程。
+- 监控端是本地/LAN roadshow demo，未实现登录、TLS、数据库和长期审计。
+- 数据集视频、Qwen GGUF 权重、生成特征和生成 clips 不上传 GitHub；小型 3D checkpoint 已归档并跟踪。
+
 ### 方式一：评估模型性能（推荐首次运行）
 
 使用已提取好的特征文件，在测试集上评估集成模型性能：

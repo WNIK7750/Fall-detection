@@ -92,7 +92,7 @@ Legend: `( )` pending, `(o)` done.
 
 ## P3 - Polish And Documentation
 
-( ) Update `README.md` with a concise Roadshow Demo section:
+(o) Update `README.md` with a concise Roadshow Demo section:
 - 3D extraction/train/eval commands
 - current best checkpoint
 - threshold policy: low `0.30`, high `0.40`
@@ -100,19 +100,19 @@ Legend: `( )` pending, `(o)` done.
 - community dashboard run command
 - continuous client run command
 
-( ) Update honesty notes:
+(o) Update product/demo boundary notes:
 - MCFD calibration is demo/synthetic or dataset-derived approximation.
 - Current demo uses local dataset videos, not real deployed cameras.
 - No encryption/login/database in the roadshow monitoring interface.
-- Event clips are exported only on trigger for privacy.
+- Event clips are exported only on trigger as the privacy-preserving product mechanism.
 
-( ) Update `Docs/Chat.md` after implementation milestones.
+(o) Update `Docs/Chat.md` after implementation milestones.
 
-( ) Confirm generated clips remain ignored by Git.
+(o) Confirm generated clips remain ignored by Git.
 
-( ) Confirm LLM weights, MCFD videos, and generated features remain ignored by Git.
+(o) Confirm LLM weights, MCFD videos, and generated features remain ignored by Git.
 
-( ) Run a final end-to-end roadshow rehearsal:
+(o) Run a final end-to-end roadshow rehearsal:
 - normal monitoring state
 - suspected trigger
 - 90-frame clip export

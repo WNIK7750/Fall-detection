@@ -199,6 +199,37 @@
   - Browser: `http://127.0.0.1:8765/`
   - Terminal B: `python playmode_event_loop.py --source-video clips/s01_1050_90.mp4 --server-url ws://127.0.0.1:8765/ws/events`
 
+### P3 Polish Status (2026-07-13)
+- `README.md` now has a Roadshow Demo section with monitor, playmode,
+  continuous client, LLM clip review, current checkpoint, and threshold
+  commands.
+- Privacy positioning clarified:
+  - Elderly-home camera streams are processed locally where possible.
+  - Events are sent to community staff only when `suspected` or `fall` requires
+    attention.
+  - 90-frame clips are exported and shared only on trigger; this is a privacy
+    protection mechanism, not merely a demo limitation.
+- Default 3D checkpoint paths now point to the Git-tracked archive checkpoint:
+  `checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth`.
+- Checkpoint hygiene:
+  - Kept `checkpoints/archive/enhanced_3d_20260712_185406/` as the current best
+    roadshow checkpoint.
+  - Removed older tracked archive checkpoint `enhanced_3d_20260712_153223`.
+  - Removed ignored local experiment checkpoint directories under
+    `checkpoints/enhanced_3d_*`.
+  - Verified the archive checkpoint loads on CPU through `FallClassifier`.
+- Artifact hygiene checked:
+  - `clips/` is ignored.
+  - `models/llm/*.gguf` is ignored.
+  - `dataset/mcfd/` is ignored.
+  - `features/3d/` is ignored.
+- Final roadshow rehearsal passed:
+  - `playmode_event_loop.py` sent immediate suspected and final LLM update to
+    `monitor_server.py`.
+  - Server upserted to one event with `status=fall`, `llm_review.status=fall`,
+    confidence `0.95`, and `/clips/...` preview URL.
+  - Handled endpoint set `handled=True`.
+
 ### Safe from Git (large files)
 - `features/3d/` — generated .npy for training (.gitignore)
 - `checkpoints/enhanced_3d_*/` — new training checkpoints (.gitignore)

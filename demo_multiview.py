@@ -42,6 +42,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_3D_CHECKPOINT = os.path.join(
     BASE_DIR,
     "checkpoints",
+    "archive",
     "enhanced_3d_20260712_185406",
     "best_model.pth",
 )
