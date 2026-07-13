@@ -152,12 +152,6 @@ OpenCV multiview visual demo:
 python demo_multiview.py --scenario 1
 ```
 
-Older 2D baseline evaluation:
-
-```bash
-python ensemble_inference.py --eval
-```
-
 ## Key Files
 
 | Path | Purpose |
