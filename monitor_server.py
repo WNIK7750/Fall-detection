@@ -18,8 +18,10 @@ Detector WebSocket:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,7 +29,7 @@ from uuid import uuid4
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 
@@ -37,6 +39,7 @@ CLIPS_DIR = BASE_DIR / "clips"
 
 MAX_EVENTS = 200
 
+CLIPS_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Fall Detection Community Monitor")
 dashboard_clients: set[WebSocket] = set()
@@ -119,11 +122,6 @@ async def add_event(payload: dict[str, Any]) -> dict[str, Any]:
     return event
 
 
-@app.on_event("startup")
-async def startup() -> None:
-    CLIPS_DIR.mkdir(parents=True, exist_ok=True)
-
-
 @app.get("/", response_class=HTMLResponse)
 async def dashboard() -> HTMLResponse:
     if not DASHBOARD_PATH.exists():
@@ -151,6 +149,11 @@ async def mark_handled(event_id: str) -> JSONResponse:
             await broadcast({"type": "handled", "event_id": event_id, "event": event})
             return JSONResponse({"ok": True, "event": event})
     return JSONResponse({"ok": False, "error": "event not found"}, status_code=404)
+
+
+@app.get("/favicon.ico")
+async def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @app.websocket("/ws/dashboard")
@@ -208,6 +211,8 @@ def main() -> None:
     args = parser.parse_args()
 
     os.environ.setdefault("PYTHONUTF8", "1")
+    if sys.platform.startswith("win"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     uvicorn.run("monitor_server:app", host=args.host, port=args.port, reload=args.reload)
 
 
