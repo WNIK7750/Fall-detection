@@ -277,6 +277,36 @@
       text-align: center;
     }
 
+    .latest {
+      margin-bottom: 18px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .latest-row {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr) 130px 150px;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-top: 1px solid var(--line);
+      font-size: 13px;
+    }
+
+    .latest-row:first-child { border-top: 0; }
+
+    .latest-main {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .latest-time {
+      color: var(--muted);
+      text-align: right;
+    }
+
     @media (max-width: 900px) {
       header {
         align-items: flex-start;
@@ -296,6 +326,13 @@
       .event {
         grid-template-columns: 1fr;
       }
+
+      .latest-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .latest-time { text-align: left; }
 
     }
   </style>
@@ -318,6 +355,10 @@
       <h2>Incoming Events</h2>
       <button id="reloadButton">Manual Sync</button>
     </div>
+
+    <section id="latestEvents" class="latest">
+      <div class="empty">No events received.</div>
+    </section>
 
     <section class="columns">
       <div class="column">
@@ -344,6 +385,7 @@
   <script>
     const suspectedEventsEl = document.getElementById('suspectedEvents');
     const fallEventsEl = document.getElementById('fallEvents');
+    const latestEventsEl = document.getElementById('latestEvents');
     const suspectedColumnCountEl = document.getElementById('suspectedColumnCount');
     const fallColumnCountEl = document.getElementById('fallColumnCount');
     const dotEl = document.getElementById('dot');
@@ -393,12 +435,38 @@
       counts.fall.textContent = events.filter((event) => event.status === 'fall').length;
       counts.suspected.textContent = events.filter((event) => event.status === 'suspected').length;
 
+      latestEventsEl.innerHTML = renderLatest(events.slice(0, 6));
       const suspectedEvents = events.filter((event) => event.status === 'suspected' && !event.handled);
       const fallEvents = events.filter((event) => event.status === 'fall' && !event.handled);
       suspectedColumnCountEl.textContent = `${suspectedEvents.length} active`;
       fallColumnCountEl.textContent = `${fallEvents.length} active`;
       suspectedEventsEl.innerHTML = renderList(suspectedEvents, 'No suspected events.');
       fallEventsEl.innerHTML = renderList(fallEvents, 'No fall alerts.');
+    }
+
+    function renderLatest(list) {
+      if (!list.length) {
+        return '<div class="empty">No events received.</div>';
+      }
+      return list.map((event) => {
+        const status = event.status || 'suspected';
+        const classifier = event.classifier || {};
+        const llm = event.llm_review || {};
+        const title = event.status === 'normal'
+          ? 'Reviewed as normal'
+          : event.status === 'fall'
+            ? 'Fall alert'
+            : 'Suspected alert';
+        const detail = `${event.address || 'local demo'} · ${llm.status || 'no review'} · ${llm.reason || ''}`;
+        return `
+          <div class="latest-row">
+            <span class="badge ${escapeHtml(status)}">${escapeHtml(status)}</span>
+            <div class="latest-main"><strong>${escapeHtml(title)}</strong> ${escapeHtml(detail)}</div>
+            <div>p_fall <strong>${formatProb(classifier.p_fall)}</strong></div>
+            <div class="latest-time">${escapeHtml(event.updated_at || event.timestamp || '')}</div>
+          </div>
+        `;
+      }).join('');
     }
 
     function renderList(list, emptyText) {
