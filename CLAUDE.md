@@ -77,12 +77,12 @@ This project targets elderly-home cameras connected to community staff. Treat pr
 - Event suppression is episode-based per track. While an event is pending, stronger triggers within 180 frames update the same `event_id` and move its evidence window instead of creating another dashboard card. After the episode trigger, new events for that track are suppressed for 300 frames, while YOLO, 3D reconstruction, smoothing, and rolling feature buffers continue running.
 - Treat MCFD AVI files as 30 FPS real time even though the container reports 120 FPS.
 - On classifier trigger, keep the trigger event pending until 151 post-trigger frames have been collected. Evidence clips contain 90 pre/trigger frames + 151 post frames = 241 frames, exactly 8.0 seconds at 30 FPS.
-- Qwen3-VL review is a two-stage low-VRAM flow. For each camera separately, sample 9 frames around the center of the most suspicious 40-frame classifier window: 4 frames before, the center frame, and 4 frames after, using 15-frame spacing. Pack each camera's 9 frames into one small 3x3 contact sheet, have Qwen turn each camera timeline into a structured text description, then use a final text-only prompt to fuse the three descriptions into the event judgment.
+- Qwen3-VL review sends three camera contact sheets in a single call. For each camera, 9 frames are sampled around the center of the most suspicious 40-frame classifier window and packed into one 3x3 contact sheet. The model directly outputs the final fall judgment from all views.
 - Do not run LLM review or release video until the full 241-frame evidence window is available.
 - Use the same `event_id` for initial suspected alert and final LLM update.
 - The current roadshow policy does not use direct classifier-only fall alerts; LLM decides whether a suspected event becomes `fall`.
 - Dashboard playback fetches released clips via one `/clip-frames` request and plays the cached frames locally. Do not reintroduce per-frame HTTP polling for playback.
-- Keep LLM image inputs small on 8GB GPUs. The defaults are `n_gpu_layers=20`, `n_ctx=1024`, `n_batch=256`, `n_ubatch=64`, and single-frame longest side 192 px.
+- Keep LLM image inputs small on 8GB GPUs. The defaults are `n_gpu_layers=20`, `n_ctx=8192`, `n_batch=2048`, `n_ubatch=64`, and image resizing disabled (`--llm-image-max-side 0`). Three contact sheets per LLM call, 5-frame stride.
 
 ## Roadshow Commands
 

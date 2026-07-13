@@ -103,7 +103,7 @@ python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-
 Dashboard event policy:
 
 - `fall`: immediately exports a clip and shows it in the Fall column.
-- `suspected`: first sends an alert without video, then waits for post-event context, exports an 8-second clip, describes one small 3x3 contact sheet per camera with Qwen3-VL, and fuses the three text descriptions into the final review.
+- `suspected`: first sends an alert without video, then waits for post-event context, exports an 8-second clip, packs each camera's 9 sampled frames into one small 3x3 contact sheet, and sends the three contact sheets to Qwen3-VL in one review call.
 - LLM says fall: same `event_id` is updated to `fall`; the old suspected card disappears and the Fall card shows video.
 - LLM says not fall: same event stays in the Suspected column as manual review. Staff can click `Request video`; after 30 seconds the video preview is released for human review.
 - Dashboard playback does not stream one frame per request. Released clips are loaded through one `/clip-frames` request into the browser, then played locally with a play/pause button and progress bar.
@@ -139,8 +139,8 @@ Runtime policy:
 - LLM says fall: update the same `event_id` to `fall` and release the clip
 - Events are initially emitted only after the rolling buffer has at least 90 pre-trigger frames. LLM review and video release happen only after the full 241-frame evidence clip is available.
 - Event suppression is episode-based per track. While an event is pending, stronger triggers within 180 frames update the same `event_id` and move its evidence window instead of creating another dashboard card. After the episode trigger, new events for that track are suppressed for 300 frames, while YOLO, 3D reconstruction, smoothing, and rolling feature buffers continue running.
-- Qwen3-VL uses a low-VRAM two-stage review. It samples 9 frames per camera around the center of the most suspicious 40-frame classifier window: 4 before, the center frame, and 4 after, spaced 15 frames apart. Each camera's 9 frames are packed into one small 3x3 contact sheet and described separately, then a final text-only prompt fuses the three descriptions into the fall decision.
-- Default LLM stability settings for 8GB GPUs: `--n-gpu-layers 20`, `--n-ctx 1024`, `--n-batch 256`, `--n-ubatch 64`, `--llm-image-max-side 192`.
+- Qwen3-VL review sends three camera contact sheets in a single call for direct multi-view judgment. It samples 9 frames per camera around the center of the most suspicious 40-frame classifier window: 4 before, the center frame, and 4 after, packed into one 3x3 contact sheet per camera.
+- Default LLM stability settings for 8GB GPUs: `--n-gpu-layers 20`, `--n-ctx 8192`, `--n-batch 2048`, `--n-ubatch 64`, `--llm-image-max-side 0`.
 
 Classifier window policy:
 
@@ -174,7 +174,7 @@ The verification command must print `True`; otherwise Qwen3-VL will run on CPU.
 Important local artifacts not stored in Git:
 
 - `dataset/mcfd/` - MCFD videos, from Kaggle: <https://www.kaggle.com/datasets/soumicksarker/multiple-cameras-fall-dataset>
-- `models/llm/*.gguf` - Qwen3-VL model and mmproj files, from ModelScope: <https://www.modelscope.cn/models/Qwen/Qwen3-VL-4B-Instruct-GGUF/files>
+- `models/llm/*.gguf` - Qwen3-VL model and mmproj files, from ModelScope: <https://www.modelscope.cn/models/Qwen/Qwen3-VL-2B-Instruct-GGUF/files>
 - `clips/` - generated event clips and QA clips
 
 Expected local layout:
@@ -183,8 +183,8 @@ Expected local layout:
 dataset/mcfd/dataset/chute01/cam1.avi
 dataset/mcfd/dataset/chute01/cam4.avi
 dataset/mcfd/dataset/chute01/cam7.avi
-models/llm/Qwen3-VL-4B-Instruct-Q4_K_S.gguf
-models/llm/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf
+models/llm/Qwen3-VL-2B-Instruct-Q4_K_M.gguf
+models/llm/mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf
 ```
 
 `features/3d/` contains generated 3D feature arrays and scaler files for training and threshold sweep:

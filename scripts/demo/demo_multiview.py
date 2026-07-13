@@ -186,8 +186,8 @@ def run_demo(args):
     # LLM Reviewer (optional)
     reviewer = None
     if args.llm:
-        model_path = str(REPO_ROOT / "models" / "llm" / "Qwen3-VL-4B-Instruct-Q4_K_S.gguf")
-        mmproj_path = str(REPO_ROOT / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf")
+        model_path = str(REPO_ROOT / "models" / "llm" / "Qwen3-VL-2B-Instruct-Q4_K_M.gguf")
+        mmproj_path = str(REPO_ROOT / "models" / "llm" / "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf")
         print("Loading LLM reviewer...")
         reviewer = LLMFallReviewer(model_path, mmproj_path, n_gpu_layers=-1)
 

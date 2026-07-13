@@ -43,9 +43,9 @@ from pipeline.event_sender import send_event
 from pipeline.features_3d import FloorEstimator, compute_features
 from pipeline.llm_reviewer import (
     LLMFallReviewer,
-    SINGLE_VIEW_TIMELINE_DESCRIPTION_PROMPT,
+    MULTIVIEW_CONTACT_SHEET_PROMPT,
     SYSTEM_PROMPT,
-    TEXT_FUSION_PROMPT,
+    make_contact_sheet,
     make_multiview_collage,
 )
 from pipeline.pose_inference import MultiPersonTracker, PoseDetector
@@ -55,8 +55,8 @@ from pipeline.video_reader import MCFDReader, find_fall_segments, load_annotatio
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_3D_CHECKPOINT = BASE_DIR / "checkpoints" / "archive" / "enhanced_3d_20260713_142749" / "best_model.pth"
-DEFAULT_MODEL = BASE_DIR / "models" / "llm" / "Qwen3-VL-4B-Instruct-Q4_K_S.gguf"
-DEFAULT_MMPROJ = BASE_DIR / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+DEFAULT_MODEL = BASE_DIR / "models" / "llm" / "Qwen3-VL-2B-Instruct-Q4_K_M.gguf"
+DEFAULT_MMPROJ = BASE_DIR / "models" / "llm" / "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf"
 
 
 @dataclass
@@ -221,27 +221,11 @@ def llm_error_result(reason: str) -> dict[str, Any]:
 
 
 def print_llm_token_budget(reviewer: LLMFallReviewer, view_labels: list[str]) -> None:
-    sample_views = [
-        {
-            "view": label,
-            "visibility": "clear",
-            "timeline_description": "The person moves through the sampled timeline.",
-            "fall_evidence": "none",
-            "view_suggests_fall": False,
-            "confidence": 0.5,
-        }
-        for label in view_labels
-    ]
-    fusion_prompt = TEXT_FUSION_PROMPT.format(
-        view_descriptions=json.dumps(sample_views, ensure_ascii=False, separators=(",", ":"))
-    )
-    print("[llm-tokens] text-only tokenizer counts; each visual call also adds 64 image tokens in current logs")
-    for label in view_labels:
-        prompt = SINGLE_VIEW_TIMELINE_DESCRIPTION_PROMPT.format(view_label=label)
-        count = reviewer.count_text_tokens(f"{SYSTEM_PROMPT}\n{prompt}", add_bos=False)
-        print(f"[llm-tokens] single_view_{label}_text={count}")
-    count = reviewer.count_text_tokens(f"{SYSTEM_PROMPT}\n{fusion_prompt}", add_bos=False)
-    print(f"[llm-tokens] fusion_text_compact_sample={count}")
+    _ = view_labels
+    print("[llm-tokens] text-only tokenizer counts; each contact sheet ~144 image tokens")
+    direct_count = reviewer.count_text_tokens(f"{SYSTEM_PROMPT}\n{MULTIVIEW_CONTACT_SHEET_PROMPT}", add_bos=False)
+    print(f"[llm-tokens] direct_multiview_text={direct_count}")
+    print(f"[llm-tokens] est_total_with_3x144_image_tokens={direct_count + 144 * 3 if direct_count is not None else None}")
 
 
 def review_clip(reviewer: LLMFallReviewer | None, clip_path: str, args: argparse.Namespace) -> dict[str, Any]:
@@ -289,11 +273,12 @@ def review_event_evidence(
             "reason": "LLM review disabled; event remains suspected.",
         }
     if view_sequences:
-        result = reviewer.review_multiview_text_fusion(
-            view_sequences,
-            view_labels=view_labels,
-            video_path=clip_path,
-        )
+        sheets = [
+            make_contact_sheet(frames, columns=3, tile_width=256, label_prefix=f"{label}_t")
+            for label, frames in zip(view_labels, view_sequences)
+            if frames
+        ]
+        result = reviewer.review_multiview_contact_sheets(sheets, video_path=clip_path)
     else:
         result = reviewer.review_video_file(
             video_path=clip_path,
@@ -316,6 +301,8 @@ def review_event_evidence(
         "sampled_frames": result.get("sampled_frames"),
         "views": result.get("views"),
         "fusion_mode": result.get("fusion_mode"),
+        "review_mode": result.get("review_mode", args.llm_review_mode),
+        "contact_sheet": result.get("contact_sheet"),
         "view_descriptions": result.get("view_descriptions"),
         "combined_description": result.get("combined_description"),
     }
@@ -598,7 +585,7 @@ def finalize_pending_event(
             "frames_per_view": args.llm_pre_samples + 1 + args.llm_post_samples,
             "center_frame": llm_center_frame,
             "stride_frames": args.llm_temporal_stride,
-            "mode": "single_view_descriptions_then_text_fusion",
+            "mode": llm_review.get("review_mode", args.llm_review_mode),
         }
         send_or_print(final_payload, args)
 
@@ -1168,8 +1155,8 @@ def main() -> None:
     parser.add_argument("--model", default=str(DEFAULT_MODEL))
     parser.add_argument("--mmproj", default=str(DEFAULT_MMPROJ))
     parser.add_argument("--n-gpu-layers", type=int, default=20)
-    parser.add_argument("--n-ctx", type=int, default=1024)
-    parser.add_argument("--n-batch", type=int, default=256,
+    parser.add_argument("--n-ctx", type=int, default=8192)
+    parser.add_argument("--n-batch", type=int, default=2048,
                         help="llama.cpp logical batch size; keep modest on 8GB GPUs")
     parser.add_argument("--n-ubatch", type=int, default=64,
                         help="llama.cpp physical micro-batch size; lower values reduce VRAM spikes")
@@ -1183,11 +1170,13 @@ def main() -> None:
                         help="Single-view LLM samples before the classifier-window center")
     parser.add_argument("--llm-post-samples", type=int, default=4,
                         help="Single-view LLM samples after the classifier-window center")
-    parser.add_argument("--llm-temporal-stride", type=int, default=15,
+    parser.add_argument("--llm-temporal-stride", type=int, default=5,
                         help="Frame stride between single-view LLM samples")
-    parser.add_argument("--llm-image-max-side", type=int, default=192,
-                        help="Downscale each LLM image so its longest side is at most this many pixels")
+    parser.add_argument("--llm-image-max-side", type=int, default=0,
+                        help="Downscale each LLM image so its longest side is at most this many pixels; 0 disables resizing")
     parser.add_argument("--llm-min-confidence", type=float, default=0.60)
+    parser.add_argument("--llm-review-mode", choices=["direct"], default="direct",
+                        help="Three camera contact sheets sent in one Qwen3-VL call for direct judgment")
     parser.add_argument("--llm-gpu-lock", dest="llm_gpu_lock", action="store_true",
                         help="Serialize LLM and CUDA YOLO/classifier calls on one GPU")
     parser.add_argument("--no-llm-gpu-lock", dest="llm_gpu_lock", action="store_false",

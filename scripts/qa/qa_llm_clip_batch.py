@@ -28,8 +28,8 @@ from pipeline.llm_reviewer import (
 )
 
 
-DEFAULT_MODEL = REPO_ROOT / "models" / "llm" / "Qwen3-VL-4B-Instruct-Q4_K_S.gguf"
-DEFAULT_MMPROJ = REPO_ROOT / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+DEFAULT_MODEL = REPO_ROOT / "models" / "llm" / "Qwen3-VL-2B-Instruct-Q4_K_M.gguf"
+DEFAULT_MMPROJ = REPO_ROOT / "models" / "llm" / "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf"
 
 
 def dry_run_video(video: str, frame_stride: int, max_frames: int, contact_sheet: bool) -> dict:
@@ -62,10 +62,11 @@ def main() -> None:
     parser.add_argument("--model", default=str(DEFAULT_MODEL))
     parser.add_argument("--mmproj", default=str(DEFAULT_MMPROJ))
     parser.add_argument("--n-gpu-layers", type=int, default=20)
-    parser.add_argument("--n-ctx", type=int, default=1024)
-    parser.add_argument("--n-batch", type=int, default=256)
+    parser.add_argument("--n-ctx", type=int, default=8192)
+    parser.add_argument("--n-batch", type=int, default=2048)
     parser.add_argument("--n-ubatch", type=int, default=64)
-    parser.add_argument("--llm-image-max-side", type=int, default=192)
+    parser.add_argument("--llm-image-max-side", type=int, default=0,
+                        help="0 disables LLM image resizing")
     parser.add_argument("--output", default=None, help="Optional JSON output file")
     args = parser.parse_args()
 

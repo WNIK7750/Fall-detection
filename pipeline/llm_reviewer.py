@@ -4,14 +4,14 @@ LLM Fall Review — Qwen3-VL-4B multimodal review for suspected fall events.
 Uses llama-cpp-python to run local quantized vision-language model.
 Only triggered when classifier outputs "suspected" (threshold_low < P_fall ≤ threshold_high).
 
-Model: Qwen3-VL-4B-Instruct Q4_K_S + mmproj Q8_0
+Model: Qwen3-VL-2B-Instruct Q4_K_M + mmproj Q8_0
 Input:  1-3 keyframe images from the suspected time window
 Output: JSON with fall judgment + confidence + reasoning
 
 Usage:
     reviewer = LLMFallReviewer(
-        model_path="models/llm/Qwen3-VL-4B-Instruct-Q4_K_S.gguf",
-        mmproj_path="models/llm/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf",
+        model_path="models/llm/Qwen3-VL-2B-Instruct-Q4_K_M.gguf",
+        mmproj_path="models/llm/mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf",
     )
     if not reviewer.ready:
         print("Model failed to load")
@@ -86,19 +86,21 @@ Example output:
 MULTIVIEW_CONTACT_SHEET_PROMPT = """You are an AI safety reviewer for an elderly fall detection system.
 
 You will be shown three contact-sheet images from synchronized surveillance
-cameras. Each image is one camera view. Each contact sheet contains 9 ordered
-frames sampled from the same 8-second event window, arranged left to right and
-top to bottom. Use all views together and focus on the temporal progression.
+cameras. Each contact sheet contains 9 ordered frames sampled from an 8-second
+window, arranged left-to-right, top-to-bottom as a timeline. Look at all three
+views together and observe the person's posture changes across the timeline.
 
-Decide whether the person transitions into a fall-risk / abnormal collapsed
-posture, or remains clearly normal.
+Judge whether the person transitions into a fall-risk / collapsed posture, or
+remains clearly in normal daily activity. Prefer safety: if one or more clear
+views show a person transitioning to lying, prone, or collapsed on the floor or
+a mat, mark it as a fall.
 
 Output your judgment as a JSON object with exactly these fields:
 - "is_fall": true or false
-- "confidence": a number from 0.0 to 1.0 indicating your certainty
-- "reason": a brief explanation in English, 1-2 sentences
+- "confidence": a number from 0.0 to 1.0
+- "reason": a brief 1-2 sentence explanation in English
 
-IMPORTANT: Only output the JSON object, nothing else. Do not add any other text.
+IMPORTANT: Only output the JSON object, nothing else.
 
 Example output:
 {{"is_fall": true, "confidence": 0.92, "reason": "Across the views, the person transitions from upright to lying on the mat."}}
@@ -224,11 +226,11 @@ class LLMFallReviewer:
         self,
         model_path: str,
         mmproj_path: str,
-        n_ctx: int = 1024,
+        n_ctx: int = 8192,
         n_gpu_layers: int = -1,
-        n_batch: int = 256,
+        n_batch: int = 2048,
         n_ubatch: int = 64,
-        max_image_side: int = 192,
+        max_image_side: int = 0,
         verbose: bool = False,
     ):
         """
@@ -284,13 +286,13 @@ class LLMFallReviewer:
         self,
         frames: list[np.ndarray],
         prompt_text: Optional[str] = None,
-        max_tokens: int = 192,
+        max_tokens: int = 384,
         timeout: float = 30.0,
     ) -> dict:
         """Review keyframes for fall event.
 
         Args:
-            frames: BGR images (H×W×3 numpy arrays), 1-3 frames.
+            frames: BGR images (H×W×3 numpy arrays).
             timeout: Max seconds for LLM response.
 
         Returns:
@@ -346,7 +348,7 @@ class LLMFallReviewer:
 
         return _parse_response(raw)
 
-    def complete_text_json(self, prompt_text: str, max_tokens: int = 192) -> dict:
+    def complete_text_json(self, prompt_text: str, max_tokens: int = 256) -> dict:
         """Run a text-only JSON completion."""
         if not self.ready:
             return _error("Model not loaded")
@@ -414,6 +416,7 @@ class LLMFallReviewer:
         result["sampled_frames"] = 9
         result["contact_sheet"] = True
         result["views"] = len(sheets)
+        result["review_mode"] = "direct_multiview_contact_sheets"
         return result
 
     def describe_single_view_sequence(self, frames: list[np.ndarray], view_label: str) -> dict:
@@ -422,7 +425,7 @@ class LLMFallReviewer:
         result = self.review(
             [sheet],
             prompt_text=SINGLE_VIEW_TIMELINE_DESCRIPTION_PROMPT.format(view_label=view_label),
-            max_tokens=160,
+            max_tokens=512,
         )
         result["view"] = view_label
         result["sampled_frames"] = len(frames)
@@ -457,12 +460,13 @@ class LLMFallReviewer:
         view_descriptions = json.dumps(compact_view_results, ensure_ascii=False, separators=(",", ":"))
         fused = self.complete_text_json(
             TEXT_FUSION_PROMPT.format(view_descriptions=view_descriptions),
-            max_tokens=192,
+            max_tokens=256,
         )
         fused["views"] = len(view_results)
         fused["view_descriptions"] = view_results
         fused["sampled_frames"] = len(view_sequences[0]) if view_sequences else 0
         fused["fusion_mode"] = "single_view_descriptions_then_text_fusion"
+        fused["review_mode"] = "single_view_descriptions_then_text_fusion"
         if video_path is not None:
             fused["video_path"] = video_path
         return fused
@@ -550,15 +554,29 @@ class LLMFallReviewer:
 
 def _parse_response(raw: str) -> dict:
     """Extract JSON from LLM response, with fallback heuristics."""
-    # Try direct JSON parse
+    # Strip markdown code fences first (common LLM output format)
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+        cleaned = re.sub(r"\n?```\s*$", "", cleaned)
+        cleaned = cleaned.strip()
+
+    # Try direct JSON parse on cleaned text
+    try:
+        parsed = json.loads(cleaned)
+        return _validate(parsed, cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Try direct parse on original text
     try:
         parsed = json.loads(raw)
         return _validate(parsed, raw)
     except json.JSONDecodeError:
         pass
 
-    # Try to extract JSON block
-    m = re.search(r'\{[^{}]*"is_fall"[^{}]*\}', raw, re.DOTALL)
+    # Try to extract any JSON object (finds outermost braces)
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
     if m:
         try:
             return _validate(json.loads(m.group()), raw)
@@ -712,8 +730,8 @@ if __name__ == "__main__":
     import os
 
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    model = os.path.join(base, "models", "llm", "Qwen3-VL-4B-Instruct-Q4_K_S.gguf")
-    mmproj = os.path.join(base, "models", "llm", "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf")
+    model = os.path.join(base, "models", "llm", "Qwen3-VL-2B-Instruct-Q4_K_M.gguf")
+    mmproj = os.path.join(base, "models", "llm", "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf")
 
     print(f"Model: {os.path.exists(model)}")
     print(f"mmproj: {os.path.exists(mmproj)}")
@@ -732,5 +750,5 @@ if __name__ == "__main__":
             print(f"Result: {json.dumps(result, indent=2)}")
     else:
         print("Model files not found. Download first:")
-        print("  https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF")
+        print("  https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF")
         print(f"  Save to: {base}/models/llm/")

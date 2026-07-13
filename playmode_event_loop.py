@@ -35,8 +35,8 @@ from pipeline.llm_reviewer import LLMFallReviewer
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_MODEL = BASE_DIR / "models" / "llm" / "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
-DEFAULT_MMPROJ = BASE_DIR / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+DEFAULT_MODEL = BASE_DIR / "models" / "llm" / "Qwen3-VL-2B-Instruct-Q4_K_M.gguf"
+DEFAULT_MMPROJ = BASE_DIR / "models" / "llm" / "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf"
 
 
 def iter_video_or_synthetic(source_video: str | None, max_frames: int, size: tuple[int, int]):
@@ -260,7 +260,7 @@ def main() -> None:
     parser.add_argument("--model", default=str(DEFAULT_MODEL))
     parser.add_argument("--mmproj", default=str(DEFAULT_MMPROJ))
     parser.add_argument("--n-gpu-layers", type=int, default=-1)
-    parser.add_argument("--n-ctx", type=int, default=4096)
+    parser.add_argument("--n-ctx", type=int, default=8192)
     parser.add_argument("--llm-frame-stride", type=int, default=9)
     parser.add_argument("--llm-max-frames", type=int, default=10)
     parser.add_argument("--llm-min-confidence", type=float, default=0.60)
