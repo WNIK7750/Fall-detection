@@ -136,6 +136,57 @@
   - `websockets` is required so uvicorn can serve WebSocket routes; it was
     installed locally and added to `requirements.txt` with FastAPI/uvicorn.
 
+### P0 Implementation Status (2026-07-13)
+- P0 continuous event client implemented:
+  - `pipeline/clip_buffer.py` keeps recent frames in memory and exports event
+    clips only on trigger.
+  - `pipeline/event_schema.py` builds the detector-to-monitor JSON payload.
+  - `pipeline/event_sender.py` sends payloads to `monitor_server.py` over
+    WebSocket.
+  - `continuous_event_client.py` runs current MCFD videos as virtual three
+    camera streams through YOLO -> tracking -> 3D reconstruction -> classifier
+    -> event trigger -> optional LLM clip review -> WebSocket event.
+  - `playmode_event_loop.py` demonstrates the same event loop without physical
+    cameras, YOLO, 3D, or classifier. It replays an existing clip or generates
+    synthetic frames, then exercises rolling buffer, 90-frame export, optional
+    LLM review, and WebSocket sending.
+- Privacy behavior:
+  - Default rolling buffer size is 300 frames.
+  - Video is not written continuously.
+  - Suspected events export only the latest 90 frames.
+  - If suspected is triggered before 90 frames are available, event escalates
+    directly to `fall` with an explanatory LLM/status reason.
+- Trigger behavior:
+  - `p_fall >= 0.40` -> direct `fall`, LLM skipped.
+  - `0.30 <= p_fall < 0.40` -> suspected, export clip, then optional LLM review.
+  - LLM-confirmed fall upgrades final event status to `fall`.
+  - Cooldown defaults to 300 frames to avoid repeated alerts.
+- Temporal tracking gate:
+  - Per-person state tracks recent features, 3D skeletons, qualities, centroids,
+    speeds, and rejected frames.
+  - Unstable skeletons are rejected on low quality, too few valid joints, or
+    unreasonable 3D centroid jumps relative to recent motion history.
+  - Because MCFD calibration is approximate, the gate uses adaptive motion
+    limits instead of hard-coded physical `g` thresholds.
+- Smoke tests passed:
+  - `python playmode_event_loop.py --no-send --source-video clips/s01_1050_90.mp4 --trigger-frame 100 --max-frames 120`
+    exported a 90-frame clip and printed a standard suspected event.
+  - `python continuous_event_client.py --scenario 1 --max-frames 80 --force-trigger-frame 40 --force-p-fall 0.35 --event-clip-frames 30 --no-send --stop-after-event --log-every 20`
+    ran real MCFD three-view YOLO/3D/client loop and emitted a forced suspected
+    event.
+  - `python playmode_event_loop.py --no-send --trigger-frame 40 --max-frames 60 --event-clip-frames 90`
+    confirmed suspected-before-90-frames escalates directly to `fall`.
+  - End-to-end monitor smoke passed with `playmode_event_loop.py` sending a
+    WebSocket event to `monitor_server.py`; `/api/events` returned the event
+    with `/clips/...` preview URL.
+  - `python playmode_event_loop.py --no-send --llm --source-video clips/s01_1050_90.mp4 --trigger-frame 100 --max-frames 120`
+    exported 90 frames, Qwen3-VL-4B reviewed the clip, and upgraded suspected
+    to `fall` with confidence 0.95.
+- Recommended no-camera roadshow command:
+  - Terminal A: `python monitor_server.py --host 127.0.0.1 --port 8765`
+  - Browser: `http://127.0.0.1:8765/`
+  - Terminal B: `python playmode_event_loop.py --source-video clips/s01_1050_90.mp4 --server-url ws://127.0.0.1:8765/ws/events --llm`
+
 ### Safe from Git (large files)
 - `features/3d/` — generated .npy for training (.gitignore)
 - `checkpoints/enhanced_3d_*/` — new training checkpoints (.gitignore)

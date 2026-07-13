@@ -6,45 +6,45 @@ Legend: `( )` pending, `(o)` done.
 
 ## P0 - Continuous Detection Client
 
-( ) Define the local event payload schema for client-to-monitor WebSocket events.
+(o) Define the local event payload schema for client-to-monitor WebSocket events.
 
-( ) Add a privacy-preserving rolling video buffer in the camera/client layer:
+(o) Add a privacy-preserving rolling video buffer in the camera/client layer:
 - Keep about 300 recent synchronized frames in memory.
 - Do not write video continuously to disk.
 - Export only the latest 90 frames when a suspected event needs LLM review.
 - If 90 frames are not available at trigger time, escalate directly to `fall`.
 
-( ) Keep three camera streams running continuously through YOLOv8n-pose batch inference.
+(o) Keep three camera streams running continuously through YOLOv8n-pose batch inference.
 
-( ) Keep the 3D reconstruction and fall classifier running continuously over tracked people.
+(o) Keep the 3D reconstruction and fall classifier running continuously over tracked people.
 
-( ) Add per-person temporal state for multi-person tracking:
+(o) Add per-person temporal state for multi-person tracking:
 - Maintain recent 2D detections, 3D skeletons, feature windows, quality scores, and status.
 - Use prior 3D position and timestamp to reject physically unreasonable identity jumps.
 - Reject obvious unstable detections such as sudden person-to-object switches or skeletons with poor quality.
 
-( ) Implement suspected/fall trigger policy:
+(o) Implement suspected/fall trigger policy:
 - `0.30 <= p_fall < 0.40` -> suspected, request clip review.
 - `p_fall >= 0.40` -> direct fall alert.
 - `p_fall < 0.30` -> normal, no event.
 - Add cooldown/deduplication so one fall does not spam repeated alerts.
 
-( ) On suspected trigger, pass the trigger timestamp/frame index back to the main loop.
+(o) On suspected trigger, pass the trigger timestamp/frame index back to the main loop.
 
-( ) Export the 90-frame event clip around the trigger from the rolling buffer.
+(o) Export the 90-frame event clip around the trigger from the rolling buffer.
 
-( ) Call the LLM clip-review interface only for suspected events with an available clip.
+(o) Call the LLM clip-review interface only for suspected events with an available clip.
 
-( ) Send the final event JSON over WebSocket:
+(o) Send the final event JSON over WebSocket:
 - direct classifier fall
 - LLM-confirmed fall
 - unresolved suspected event if the LLM cannot decide or errors
 
-( ) Add a runnable dataset-backed client command using current MCFD videos.
+(o) Add a runnable dataset-backed client command using current MCFD videos.
 
-( ) Smoke test the continuous client without LLM using a current scenario.
+(o) Smoke test the continuous client without LLM using a current scenario.
 
-( ) Smoke test the continuous client with LLM on at least one suspected/fall clip.
+(o) Smoke test the continuous client with LLM on at least one suspected/fall clip.
 
 ## P1 - Community Monitoring Demo
 
