@@ -280,8 +280,18 @@ def review_event_evidence(
             step = max(1, len(frames) // 3)
             for g in range(3):
                 group = frames[g * step:(g + 1) * step]
+                if not group:
+                    continue
                 sheets.append(make_contact_sheet(group, columns=3, tile_width=256, label_prefix=f"{label}_g{g}"))
-        result = reviewer.review_multiview_contact_sheets(sheets, video_path=clip_path)
+        if sheets:
+            result = reviewer.review_multiview_contact_sheets(sheets, video_path=clip_path)
+        else:
+            result = reviewer.review_video_file(
+                video_path=clip_path,
+                frame_stride=args.llm_frame_stride,
+                max_frames=args.llm_max_frames,
+                contact_sheet=False,
+            )
     else:
         result = reviewer.review_video_file(
             video_path=clip_path,
@@ -513,12 +523,13 @@ def make_view_frame_sequences(
         for frame_index in target_frames:
             item = by_frame.get(frame_index)
             if item is None:
-                return []
+                continue  # tolerate gaps from decoding errors
             views = item.views
             if views is None or view_idx >= len(views):
-                return []
+                continue
             frames.append(views[view_idx])
-        sequences.append(frames)
+        if frames:
+            sequences.append(frames)
     return sequences
 
 
@@ -532,6 +543,14 @@ def finalize_pending_event(
     output_path = make_clip_path(event.scenario, event.trigger_frame, event.status, Path(args.clip_dir))
     start_frame = event.trigger_frame - args.event_pre_frames + 1
     end_frame = event.trigger_frame + args.event_post_frames
+
+    # Clamp evidence window to available buffer frames (handles scenario-edge triggers)
+    buf_range = clip_buffer.frame_range()
+    if buf_range is not None:
+        buf_start, buf_end = buf_range
+        start_frame = max(start_frame, buf_start)
+        end_frame = min(end_frame, buf_end)
+
     clip_info = clip_buffer.export_range_info(
         output_path,
         start_frame=start_frame,
@@ -1082,7 +1101,26 @@ def run_client(args: argparse.Namespace) -> None:
     
                     if args.log_every and frame_idx % args.log_every == 0:
                         print(f"[client] frame={frame_idx} buffer={len(clip_buffer)} tracks={len(states)}")
-    
+
+            # --- Process events stuck at scenario boundary (release_frame > last_frame) ---
+            for event in list(pending_events):
+                if event.release_frame > last_frame_idx:
+                    if args.verbose:
+                        print(
+                            f"[event] scenario-end finalizing event_id={event.event_id} "
+                            f"trigger={event.trigger_frame} release={event.release_frame} "
+                            f"last_frame={last_frame_idx}"
+                        )
+                future = finalize_pending_event(
+                    args=args,
+                    clip_buffer=clip_buffer,
+                    review_manager=review_manager,
+                    event=event,
+                )
+                if future is not None:
+                    pending_reviews.append(future)
+                pending_events.remove(event)
+
             print(f"[client] scenario={scenario} complete last_frame={last_frame_idx}; resetting 3D state")
             if not args.roadshow_loop:
                 break

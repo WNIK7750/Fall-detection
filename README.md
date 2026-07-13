@@ -174,9 +174,9 @@ The verification command must print `True`; otherwise Qwen3-VL will run on CPU.
 Important local artifacts not stored in Git:
 
 - `dataset/mcfd/` - MCFD videos, from Kaggle: <https://www.kaggle.com/datasets/soumicksarker/multiple-cameras-fall-dataset>
-- `models/llm/*.gguf` - Qwen3-VL model and mmproj files, from ModelScope: <https://www.modelscope.cn/models/Qwen/Qwen3-VL-2B-Instruct-GGUF/files>
+- `models/llm/Qwen3-VL-2B-Instruct-Q4_K_M.gguf` - Qwen3-VL model and mmproj files, from ModelScope: <https://www.modelscope.cn/models/unsloth/Qwen3-VL-2B-Instruct-GGUF/file/view/master/Qwen3-VL-2B-Instruct-Q4_K_M.gguf?status=2>
+- `models/llm/mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf` - Qwen3-VL model and mmproj files, from ModelScope: <https://www.modelscope.cn/models/Qwen/Qwen3-VL-2B-Instruct-GGUF/file/view/master/mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf?status=2>
 - `clips/` - generated event clips and QA clips
-
 Expected local layout:
 
 ```text

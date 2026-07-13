@@ -57,6 +57,13 @@ class RollingClipBuffer:
     def __len__(self) -> int:
         return len(self._frames)
 
+    def frame_range(self) -> tuple[int, int] | None:
+        """Return (min_frame, max_frame) of buffered frames, or None if empty."""
+        if not self._frames:
+            return None
+        indices = [item.frame_index for item in self._frames]
+        return (min(indices), max(indices))
+
     def can_export(self, frames: int) -> bool:
         return len(self._frames) >= frames
 
@@ -118,10 +125,14 @@ class RollingClipBuffer:
         end_frame: int,
         fps: float | None = None,
     ) -> ClipExportInfo | None:
-        """Export buffered frames by inclusive frame range."""
+        """Export buffered frames by inclusive frame range.
+
+        Tolerates gaps (e.g. from video decoding errors). Returns None only
+        when fewer than half the expected frames are available.
+        """
         selected = self.range_by_frame(start_frame, end_frame)
         expected = end_frame - start_frame + 1
-        if len(selected) < expected:
+        if len(selected) < max(1, expected // 2):
             return None
         return _export_selected(output_path, selected, fps or self.fps)
 
