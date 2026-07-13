@@ -1211,7 +1211,7 @@ def main() -> None:
                         help="Single-view LLM samples before the classifier-window center")
     parser.add_argument("--llm-post-samples", type=int, default=13,
                         help="Single-view LLM samples after the classifier-window center")
-    parser.add_argument("--llm-temporal-stride", type=int, default=3,
+    parser.add_argument("--llm-temporal-stride", type=int, default=5,
                         help="Frame stride between LLM time samples")
     parser.add_argument("--llm-image-max-side", type=int, default=0,
                         help="Downscale each LLM image so its longest side is at most this many pixels; 0 disables resizing")
