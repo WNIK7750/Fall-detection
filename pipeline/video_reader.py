@@ -146,6 +146,7 @@ class MCFDReader:
         # Total frames = min effective length across all cameras
         self.total_frames = min(self._effective_lengths)
         self.current_frame = 0  # relative to seek start
+        self.last_original_frames: list[np.ndarray] = []
 
         if end_frame is None:
             self.end_frame = self.total_frames
@@ -174,12 +175,14 @@ class MCFDReader:
     def __iter__(self) -> Iterator[list[np.ndarray]]:
         while self.current_frame < self.end_frame:
             frames: list[np.ndarray] = []
+            original_frames: list[np.ndarray] = []
             all_ok = True
             for i, cap in enumerate(self.caps):
                 ok, frame = cap.read()
                 if not ok:
                     all_ok = False
                     break
+                original_frames.append(frame.copy())
                 # Undistort before resize (corrects lens distortion for 3D)
                 if self._undistort and self._undistort_maps is not None:
                     frame = cv2.remap(
@@ -194,6 +197,7 @@ class MCFDReader:
             if not all_ok:
                 break
 
+            self.last_original_frames = original_frames
             self.current_frame += 1
             yield frames
 

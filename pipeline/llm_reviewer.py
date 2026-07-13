@@ -40,223 +40,69 @@ except Exception as exc:
     LLAMA_IMPORT_ERROR = exc
 
 
-RAW_FALL_REVIEW_PROMPT = """You are an AI safety reviewer for an elderly fall detection system.
+FALL_REVIEW_PROMPT = """你是老年人跌倒检测系统的视觉复核员。
 
-You will be shown {n_frames} ordered frames sampled from a short surveillance
-video clip. Use the visible motion over time. Do not assume a fall happened just
-because this is a fall detection task. Decide whether the person transitions
-into a fall-risk / abnormal collapsed posture OR remains in clearly normal
-daily activity.
+你会看到{n_frames}张按时间顺序采样的画面。请只根据画面中的动作判断，不要因为这是疑似事件就默认摔倒。
 
-Output your judgment as a JSON object with exactly these fields:
-- "is_fall": true or false (whether a fall-risk event is visible)
-- "confidence": a number from 0.0 to 1.0 indicating your certainty
-- "reason": a brief explanation in English, 1-2 sentences
+判定标准：
+- true：明显失衡、快速失控下降、撞击/倒地，或倒下后异常横躺/趴卧/仰卧且未及时恢复。
+- false：蹲下、弯腰/捡东西、缓慢坐下或躺下、扶着支撑物下降、从坐姿/躺姿起身。
+- 只看到身体变低、坐着、躺着、靠近沙发/垫子，不足以判定摔倒；重点看动作方向、速度和是否可控。
+- MCFD中落在软垫或沙发上不排除摔倒；若动作明显失控仍判true。
+- 证据不清时判false并降低confidence，交给人工复核。
 
-IMPORTANT: Only output the JSON object, nothing else. Do not add any other text.
-
-Example output:
-{{"is_fall": true, "confidence": 0.92, "reason": "Person is lying on floor."}}
+只输出JSON：{{"is_fall": true或false, "confidence": 0.0到1.0, "reason": "中文简短原因"}}
 """
 
 
-CONTACT_SHEET_REVIEW_PROMPT = """You are an AI safety reviewer for an elderly fall detection system.
+CAMERA_CONTACT_SHEET_PROMPT = """你是老年人居家跌倒检测系统的视觉复核员。
 
-You will be shown one contact-sheet image made from {n_frames} ordered frames
-sampled from a short surveillance video clip. The tiles are arranged left to
-right, top to bottom, and each tile is labeled with its time index. Treat the
-contact sheet as a short video timeline.
+你会看到同一个摄像头（{view_label}）的8张四宫格图片。
+每张四宫格是2x2时间序列（从左到右、从上到下），8张图连续覆盖围绕可疑动作中心采样出的32帧。
+每个小图左上角标有全局时间编号t00到t31；t00最早，t31最晚。必须按t00 -> t31判断，不能倒着看。
+这些画面来自3D分类器筛出的疑似窗口。
 
-Judge the motion over time: whether the person transitions from normal/upright
-activity into a fall-risk / abnormal collapsed posture, or remains clearly
-normal. Focus on the temporal progression, not just one tile.
+画面说明：
+- 镜头存在一定畸变，画面边缘的人体和地面线条可能会变形。
+- 屏幕中间区域是底板，底板上贴有网格胶带，能看到银色和红色胶带。
+- 人正常站立时，身体理论上接近竖直方向，头部在上方。
+- 判断动作时优先看人体相对底板网格的姿态变化和运动连续性，不要只凭边缘畸变后的形状下结论。
 
-Output your judgment as a JSON object with exactly these fields:
-- "is_fall": true or false
-- "confidence": a number from 0.0 to 1.0 indicating your certainty
-- "reason": a brief explanation in English, 1-2 sentences
+请像人工复核员一样先理解这段动作，而不是只看最后一帧。可以按这些线索思考：
+- 起点和终点：人一开始大致是站立、坐着、蹲着还是躺着？最后是更低、更高，还是姿态稳定？
+- 重心路径：身体是在主动、有节奏地下移/上移，还是突然失去平衡后被动下坠？
+- 支撑方式：脚、膝、手、沙发/床沿是否在持续支撑身体？动作看起来是否有目的？
+- 接触方式：接触地面/垫子/沙发时像正常坐卧，还是像撞击、滑倒、塌落？
+- 恢复趋势：后续画面是否有坐稳、站起、调整姿势等主动恢复？
 
-IMPORTANT: Only output the JSON object, nothing else. Do not add any other text.
+请在以下动作类别中选择最贴近的一类：
+- "fall"：失衡、滑倒、塌落、被动下坠，最后形成异常倒地姿态。
+- "squat_bend"：蹲下、深蹲、弯腰、捡东西，通常有膝/脚/手的主动支撑。
+- "sit_down"：坐到椅子、沙发、床或垫子上，下降过程较可控。
+- "lie_down"：主动躺下或调整到躺姿。
+- "stand_up"：从坐姿、躺姿或蹲姿起身。
+- "unclear"：遮挡、画面不足，或几个类别难以区分。
 
-Example output:
-{{"is_fall": true, "confidence": 0.92, "reason": "The sequence shows the person moving from upright posture to lying on the floor."}}
+is_fall 应与 action 保持一致：只有 action 为 "fall" 时才输出 true。reason 用一句话说明最关键的视觉线索即可。
+
+只输出JSON：{{"is_fall": true或false, "confidence": 0.0到1.0, "action": "fall/squat_bend/sit_down/lie_down/stand_up/unclear", "reason": "中文简短原因"}}
 """
 
+MULTIVIEW_CONTACT_SHEET_PROMPT = CAMERA_CONTACT_SHEET_PROMPT.format(view_label="camera")
 
-MULTIVIEW_CONTACT_SHEET_PROMPT = """你是一个老年人居家跌倒检测系统的AI安全审核员。你的判断直接影响是否向社区工作人员发送紧急警报。
+SYSTEM_PROMPT = "你是一个视觉安全审核员。只输出合法的JSON，不要markdown或其他文字。"
 
-## 你的任务
-
-你会看到9张九宫格图片，来自3个同步的居家监控摄像头（cam1、cam4、cam7，每个摄像头3张九宫格）。
-每张九宫格是一个3x3的网格，包含9帧按时间顺序排列的图像（从左到右、从上到下）。
-
-### 采样方式
-- 每路摄像头共27帧，以3帧为间隔采样（跨度约2.6秒）
-- 每9帧打包为一张九宫格，3路摄像头各3张，共9张九宫格
-- 所有画面由YOLO姿态检测和3D分类器预筛选，已标记为可疑时间窗口
-
-### 观察重点
-请从所有视角综合分析人物的完整运动过程，关注以下方面：
-
-1. **运动速度与节奏**：人物的下降是缓慢可控的，还是突然加速的？
-2. **身体控制**：下降过程中身体是否保持平衡？有没有手臂挥舞、支撑或抓握动作？
-3. **重心变化**：重心下降是平缓的（阶梯式）还是急剧的（自由落体式）？
-4. **最终姿态**：人物最终处于什么姿态（站立/端坐/侧躺/俯卧/仰卧/跪姿）？能否自行恢复直立？
-5. **多视角一致性**：多个摄像头是否一致显示同一行为？注意遮挡和可见性问题。
-
-## ⚠️ 数据集特征
-
-这是MCFD（Multiple Cameras Fall Dataset）模拟摔倒数据集。
-受试者会在白色防摔垫、沙发、软垫等缓冲表面上模拟真实摔倒。
-**请根据动作质量而非落点来判断**：
-
-### 判定为摔倒（is_fall: true）的关键特征：
-- 下降动作突然、不受控、速度快
-- 身体明显倾斜或坍塌，躯干从竖直变为水平
-- 手臂向前伸出支撑、挥舞或试图抓住物体
-- 双腿失去支撑力、膝盖弯曲后坐倒
-- 最终姿态为躺卧（侧躺、俯卧、仰卧）而非端坐
-- **即使最终落在沙发、垫子等软表面上，只要动作失控就是摔倒**
-
-### 非摔倒（is_fall: false）的典型场景：
-- 缓慢、可控地坐下（手扶扶手、躯干保持直立、最终端坐）
-- 弯腰捡东西后迅速恢复直立
-- 蹲下后保持稳定并可能站起
-- 正常的行走、站立、转身等日常活动
-
-### 关键区分示例：
-| 场景 | 判断 | 原因 |
-|------|------|------|
-| 快速坍塌到沙发上，最终躺卧 | 摔倒 | 速度失控，躯干水平，无支撑 |
-| 缓慢坐下到沙发上，最终端坐 | 非摔倒 | 速度可控，躯干直立，有扶手支撑 |
-| 有支撑地下降（手扶墙壁/扶手/家具），稳定坐到地面 | 非摔倒 | 有意识使用支撑物，下降可控 |
-| 站在垫子上突然跌倒，四肢着垫 | 摔倒 | 动作突然，无支撑，有摔倒特征 |
-| 从站立平稳蹲下，后站起 | 非摔倒 | 全程可控，恢复直立 |
-
-**核心区别**：下降动作是否有支撑物辅助、是否可控或躯干是否保持直立。
-摔倒到沙发上 = 速度快 + 无支撑 + 躯干变水平 + 手臂下意识支撑；
-坐下到沙发上 = 速度慢 + 手扶扶手 + 躯干直立 + 动作有意识。
-如果人物用手扶住物体缓慢下降，即使最终坐在地上也不是摔倒。
-
-## 输出格式
-
-只输出一个合法的JSON对象，不要有任何markdown标记、解释或其他文字：
-
-```json
-{"is_fall": true或false, "confidence": 0.0到1.0之间的数字, "reason": "中文1-3句话的判断依据"}
-```
-
-### confidence指导：
-- 0.9-1.0：多视角清晰证据，无歧义
-- 0.7-0.9：有明确证据但部分视角遮挡
-- 0.5-0.7：证据存在但不够明确，偏保守判断
-- 低于0.5：几乎无法判断，请尽量给出确定性结论
-
-### reason要求：
-用中文简要说明核心判断依据，引用具体观察（如"人物在第5-7帧之间突然失去平衡，躯干快速从竖直变为水平"）。
-
-## 安全原则
-
-这是一个安全关键系统。误判正常活动为摔倒会增加社区工作人员的负担，
-但漏判真正的摔倒可能导致老人无法及时获得救助。
-"""
-
-
-SINGLE_VIEW_TIMELINE_DESCRIPTION_PROMPT = """You are describing one camera view for an elderly fall detection system.
-
-You will be shown 9 ordered frames from the same camera. The middle frame is
-the center of the most suspicious 40-frame 3D classifier window. The four
-earlier frames are sampled every 15 frames before it, and the four later frames
-are sampled every 15 frames after it. Treat them as a short timeline.
-
-Do not make a final multi-camera decision. Describe only what this camera view
-shows: posture, motion trend, whether the person becomes lower/horizontal, and
-whether visibility is clear or occluded.
-
-Output valid JSON only with exactly these fields:
-- "view": "{view_label}"
-- "visibility": "clear", "partial", or "poor"
-- "timeline_description": a concise 1-2 sentence description of the motion
-- "fall_evidence": a concise 1 sentence description of any fall-like evidence, or "none"
-- "view_suggests_fall": true or false
-- "confidence": a number from 0.0 to 1.0
-
-IMPORTANT: Only output the JSON object, nothing else.
-"""
-
-
-TEXT_FUSION_PROMPT = """You are the final safety reviewer for an elderly fall detection system.
-
-You are given three text-only observations from synchronized camera views.
-These observations were produced from 9 ordered frames per camera around the
-same suspicious event. You will not receive images in this step.
-
-Use the three view descriptions together. Prefer safety: if one or more clear
-views show a transition into a collapsed, horizontal, prone, supine, or
-fall-risk posture, classify the event as a fall. If evidence is unclear or
-conflicting, keep the event suspicious instead of calling it normal.
-
-Camera observations:
-{view_descriptions}
-
-Output valid JSON only with exactly these fields:
-- "is_fall": true or false
-- "confidence": a number from 0.0 to 1.0
-- "combined_description": a concise 1-2 sentence multi-view summary
-- "reason": a concise explanation of the final decision
-
-IMPORTANT: Only output the JSON object, nothing else.
-"""
-
-
-CONTEXT_FALL_REVIEW_PROMPT = """你是一个老年人跌倒检测系统的AI安全审核员。
-
-你会看到{n_frames}张来自多摄像头监控视频的关键帧图片。
-这些图片是在3D跌倒分类器已将此时间段标记为可疑后才显示的。
-你的任务是判断视觉证据是跌倒风险/异常姿态，还是明显的正常日常活动。
-
-⚠️ MCFD是一个模拟摔倒数据集，受试者使用白色防摔垫/软着陆表面进行模拟摔倒。
-人物横向、侧躺、俯卧、仰卧或静止在垫子/地板上都应判为"is_fall": true。
-不要将其当作可控的休息动作，除非人物明显正坐在椅子/沙发上或正在行走。
-漏判跌倒比误判更危险，请优先捕获跌倒事件。
-
-输出一个JSON对象，只包含以下字段：
-- "is_fall": true 或 false（是否发生跌倒）
-- "confidence": 0.0到1.0之间的数字
-- "reason": 中文1-2句话的简要解释
-
-⚠️ 重要：只输出JSON对象，不要有任何其他文字。
-
-示例：{{"is_fall": true, "confidence": 0.92, "reason": "人物从直立快速坍塌到垫子上，手臂支撑，动作失控。"}}
-
-is_fall为true的正例：
-- 人物侧躺或仰卧在白色地垫/缓冲垫上
-- 人物从直立过渡到坍塌/后仰姿态
-
-is_fall为false的反例：
-- 人物正常站立、行走或笔直坐着
-- 人物端坐在沙发/椅子上，没有坍塌动作
-
-YOLO + 3D重建的系统证据：
-{evidence}
-"""
-
-SYSTEM_PROMPT = "你是一个专业的计算机视觉安全审核员，专门为老年人居家跌倒检测系统工作。你的任务是仔细分析监控画面中的人物行为，判断是否发生跌倒事件。你必须始终只输出合法的JSON格式，不要添加任何其他内容，不要使用markdown代码块包裹JSON。"
-
-RETRY_FORMAT_PROMPT_1 = """你上一次的回答无法被解析为合法的JSON。
-请重新观察图片。基于你之前的分析（见下方），只输出一个合法的JSON对象，
-不要有任何markdown、解释或其他文字：
-{{"is_fall": true/false, "confidence": 0.0-1.0, "reason": "简要说明"}}
+RETRY_FORMAT_PROMPT_1 = """上一次的回答无法解析为合法JSON。
+请重新看图。基于之前的分析，只输出JSON对象，不要markdown或其他文字：
+字段：is_fall, confidence, reason
 
 之前的分析：
 {previous_output}
 """
 
-RETRY_FORMAT_PROMPT_2 = """两次尝试都未能生成合法的JSON。
-这是最后一次机会。综合以下两次分析，严格输出一个JSON对象：
-{{"is_fall": true/false, "confidence": 0.0-1.0, "reason": "总结"}}
-如果证据不明确，出于安全考虑默认输出"is_fall": true。
-不要有任何markdown、不要有其他文字。只输出JSON。
+RETRY_FORMAT_PROMPT_2 = """两次都未能生成合法JSON。综合以下分析，严格输出JSON：
+字段：is_fall, confidence, reason
+不要markdown，不要其他文字。
 
 第一次分析：
 {output_1}
@@ -389,10 +235,7 @@ class LLMFallReviewer:
 
         # Build prompt
         if prompt_text is None:
-            prompt_text = CONTEXT_FALL_REVIEW_PROMPT.format(
-                n_frames=len(frames),
-                evidence="No structured evidence was provided.",
-            )
+            prompt_text = FALL_REVIEW_PROMPT.format(n_frames=len(frames))
 
         # Create message content with images + text
         content = []
@@ -443,10 +286,10 @@ class LLMFallReviewer:
         return _parse_response(raw)
 
     def review_raw(self, frames: list[np.ndarray]) -> dict:
-        """First pass: visual-only review on unmodified frames."""
+        """Review ordered frames with the unified Chinese fall prompt."""
         return self.review(
             frames,
-            prompt_text=RAW_FALL_REVIEW_PROMPT.format(n_frames=len(frames)),
+            prompt_text=FALL_REVIEW_PROMPT.format(n_frames=len(frames)),
         )
 
     def review_video_file(
@@ -469,7 +312,7 @@ class LLMFallReviewer:
             sheet = make_contact_sheet(frames)
             result = self.review(
                 [sheet],
-                prompt_text=CONTACT_SHEET_REVIEW_PROMPT.format(n_frames=len(frames)),
+                prompt_text=FALL_REVIEW_PROMPT.format(n_frames=len(frames)),
             )
         else:
             result = self.review_raw(frames)
@@ -488,18 +331,26 @@ class LLMFallReviewer:
             return False
         return True
 
-    def review_multiview_contact_sheets(self, sheets: list[np.ndarray], video_path: str | None = None) -> dict:
-        """Review contact sheets with up to 3 retries on parse/format failure."""
+    def review_camera_contact_sheets(
+        self,
+        sheets: list[np.ndarray],
+        view_label: str,
+        video_path: str | None = None,
+        sampled_frames: int | None = None,
+    ) -> dict:
+        """Review one camera's ordered contact sheets with parse-format retries."""
+        prompt = CAMERA_CONTACT_SHEET_PROMPT.format(view_label=view_label)
         result = self.review(
             sheets,
-            prompt_text=MULTIVIEW_CONTACT_SHEET_PROMPT,
+            prompt_text=prompt,
         )
         if video_path is not None:
             result["video_path"] = video_path
-        result["sampled_frames"] = 9
+        result["sampled_frames"] = sampled_frames if sampled_frames is not None else len(sheets) * 9
         result["contact_sheet"] = True
-        result["views"] = len(sheets)
-        result["review_mode"] = "direct_multiview_contact_sheets"
+        result["view"] = view_label
+        result["sheets"] = len(sheets)
+        result["review_mode"] = "single_camera_81_frame_contact_sheets"
         result["retry_count"] = 0
 
         if self._is_valid_fall_result(result):
@@ -507,7 +358,7 @@ class LLMFallReviewer:
 
         # --- Retry 1: with images + previous output + format enforcement ---
         raw_1 = result.get("raw_response", "")
-        retry_prompt = MULTIVIEW_CONTACT_SHEET_PROMPT + "\n\n" + RETRY_FORMAT_PROMPT_1.format(previous_output=raw_1)
+        retry_prompt = prompt + "\n\n" + RETRY_FORMAT_PROMPT_1.format(previous_output=raw_1)
         retry_1 = self.review(
             sheets,
             prompt_text=retry_prompt,
@@ -515,10 +366,13 @@ class LLMFallReviewer:
         retry_1["raw_response"] = retry_1.get("raw_response", "")
         if self._is_valid_fall_result(retry_1):
             retry_1["retry_count"] = 1
-            retry_1["review_mode"] = "direct_multiview_retry_1"
+            retry_1["review_mode"] = "single_camera_retry_1"
             if video_path is not None:
                 retry_1["video_path"] = video_path
-            retry_1["views"] = len(sheets)
+            retry_1["view"] = view_label
+            retry_1["sheets"] = len(sheets)
+            retry_1["sampled_frames"] = sampled_frames if sampled_frames is not None else len(sheets) * 9
+            retry_1["contact_sheet"] = True
             return retry_1
 
         # --- Retry 2: final forced format, use both previous outputs ---
@@ -530,75 +384,38 @@ class LLMFallReviewer:
         retry_2["raw_response"] = retry_2.get("raw_response", "")
         if self._is_valid_fall_result(retry_2):
             retry_2["retry_count"] = 2
-            retry_2["review_mode"] = "direct_multiview_retry_2"
+            retry_2["review_mode"] = "single_camera_retry_2"
             if video_path is not None:
                 retry_2["video_path"] = video_path
-            retry_2["views"] = len(sheets)
+            retry_2["view"] = view_label
+            retry_2["sheets"] = len(sheets)
+            retry_2["sampled_frames"] = sampled_frames if sampled_frames is not None else len(sheets) * 9
+            retry_2["contact_sheet"] = True
             return retry_2
 
         # --- All 3 attempts failed: escalate to fall ---
         return {
-            "is_fall": True,
-            "confidence": 0.5,
-            "reason": "All 3 LLM attempts failed to produce a valid response; escalated to fall by policy.",
+            "is_fall": None,
+            "confidence": 0.0,
+            "reason": "LLM failed to produce a valid JSON response for this camera.",
             "raw_response": f"RAW_1: {raw_1[:500]}\n---\nRAW_2: {raw_2[:500]}",
             "retry_count": 3,
-            "review_mode": "direct_multiview_fallback",
-            "views": len(sheets),
+            "review_mode": "single_camera_invalid",
+            "view": view_label,
+            "sheets": len(sheets),
+            "sampled_frames": sampled_frames if sampled_frames is not None else len(sheets) * 9,
+            "contact_sheet": True,
             "video_path": video_path,
         }
 
-    def describe_single_view_sequence(self, frames: list[np.ndarray], view_label: str) -> dict:
-        """Describe one camera's 9 ordered frames without making the final decision."""
-        sheet = make_contact_sheet(frames, columns=3, tile_width=128, label_prefix=f"{view_label}_t")
-        result = self.review(
-            [sheet],
-            prompt_text=SINGLE_VIEW_TIMELINE_DESCRIPTION_PROMPT.format(view_label=view_label),
-            max_tokens=512,
+    def review_multiview_contact_sheets(self, sheets: list[np.ndarray], video_path: str | None = None) -> dict:
+        """Compatibility wrapper for older callers."""
+        return self.review_camera_contact_sheets(
+            sheets,
+            view_label="camera",
+            video_path=video_path,
+            sampled_frames=len(sheets) * 9,
         )
-        result["view"] = view_label
-        result["sampled_frames"] = len(frames)
-        result["contact_sheet"] = True
-        return result
-
-    def review_multiview_text_fusion(
-        self,
-        view_sequences: list[list[np.ndarray]],
-        view_labels: list[str] | None = None,
-        video_path: str | None = None,
-    ) -> dict:
-        """Describe each camera separately, then fuse the text observations."""
-        if view_labels is None:
-            view_labels = [f"cam{i + 1}" for i in range(len(view_sequences))]
-
-        view_results = []
-        for label, frames in zip(view_labels, view_sequences):
-            if not frames:
-                view_results.append({
-                    "view": label,
-                    "visibility": "poor",
-                    "timeline_description": "No frames were available for this camera.",
-                    "fall_evidence": "none",
-                    "view_suggests_fall": False,
-                    "confidence": 0.0,
-                })
-                continue
-            view_results.append(self.describe_single_view_sequence(frames, label))
-
-        compact_view_results = [compact_view_result(result, label) for result, label in zip(view_results, view_labels)]
-        view_descriptions = json.dumps(compact_view_results, ensure_ascii=False, separators=(",", ":"))
-        fused = self.complete_text_json(
-            TEXT_FUSION_PROMPT.format(view_descriptions=view_descriptions),
-            max_tokens=256,
-        )
-        fused["views"] = len(view_results)
-        fused["view_descriptions"] = view_results
-        fused["sampled_frames"] = len(view_sequences[0]) if view_sequences else 0
-        fused["fusion_mode"] = "single_view_descriptions_then_text_fusion"
-        fused["review_mode"] = "single_view_descriptions_then_text_fusion"
-        if video_path is not None:
-            fused["video_path"] = video_path
-        return fused
 
     def count_text_tokens(self, text: str, add_bos: bool = False) -> int | None:
         """Count tokenizer tokens for text-only prompt budgeting."""
@@ -610,13 +427,10 @@ class LLMFallReviewer:
             return len(self.llm.tokenize(text.encode("utf-8"), add_bos=add_bos))
 
     def review_with_context(self, frames: list[np.ndarray], evidence: str) -> dict:
-        """Second pass: review with overlaid system evidence and text summary."""
+        """Compatibility wrapper; review with the unified Chinese fall prompt."""
         return self.review(
             frames,
-            prompt_text=CONTEXT_FALL_REVIEW_PROMPT.format(
-                n_frames=len(frames),
-                evidence=evidence,
-            ),
+            prompt_text=FALL_REVIEW_PROMPT.format(n_frames=len(frames)),
         )
 
     def review_dual(
@@ -745,18 +559,6 @@ def _validate(parsed: dict, raw: str) -> dict:
     return normalized
 
 
-def compact_view_result(result: dict, fallback_view: str) -> dict:
-    """Keep only fields the text-fusion prompt actually needs."""
-    return {
-        "view": result.get("view", fallback_view),
-        "visibility": result.get("visibility", "poor"),
-        "timeline_description": result.get("timeline_description", result.get("reason", "")),
-        "fall_evidence": result.get("fall_evidence", "none"),
-        "view_suggests_fall": bool(result.get("view_suggests_fall", result.get("is_fall", False))),
-        "confidence": float(result.get("confidence", 0.0) or 0.0),
-    }
-
-
 def _error(msg: str) -> dict:
     return {"is_fall": None, "confidence": 0.0, "reason": msg, "raw_response": f"ERROR: {msg}"}
 
@@ -799,6 +601,9 @@ def make_contact_sheet(
     columns: int = 5,
     tile_width: int = 320,
     label_prefix: str = "t",
+    start_index: int = 0,
+    center_crop_fraction: float | None = None,
+    center_crop_square: bool = False,
 ) -> np.ndarray:
     """Pack ordered frames into one labeled timeline image."""
     import cv2
@@ -809,16 +614,31 @@ def make_contact_sheet(
     rows = int(np.ceil(len(frames) / columns))
 
     h0, w0 = frames[0].shape[:2]
-    tile_height = max(1, int(round(tile_width * h0 / max(w0, 1))))
+    if center_crop_square or center_crop_fraction is not None:
+        tile_height = tile_width
+    else:
+        tile_height = max(1, int(round(tile_width * h0 / max(w0, 1))))
     sheet = np.zeros((rows * tile_height, columns * tile_width, 3), dtype=np.uint8)
 
     for i, frame in enumerate(frames):
         row, col = divmod(i, columns)
+        if center_crop_square:
+            h, w = frame.shape[:2]
+            side = max(1, min(h, w))
+            y0_crop = max(0, (h - side) // 2)
+            x0_crop = max(0, (w - side) // 2)
+            frame = frame[y0_crop:y0_crop + side, x0_crop:x0_crop + side]
+        elif center_crop_fraction is not None and 0 < center_crop_fraction <= 1:
+            h, w = frame.shape[:2]
+            side = max(1, int(round(min(h, w) * center_crop_fraction)))
+            y0_crop = max(0, (h - side) // 2)
+            x0_crop = max(0, (w - side) // 2)
+            frame = frame[y0_crop:y0_crop + side, x0_crop:x0_crop + side]
         tile = cv2.resize(frame, (tile_width, tile_height), interpolation=cv2.INTER_AREA)
         cv2.rectangle(tile, (0, 0), (72, 24), (0, 0, 0), -1)
         cv2.putText(
             tile,
-            f"{label_prefix}{i:02d}",
+            f"{label_prefix}{start_index + i:02d}",
             (6, 17),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
