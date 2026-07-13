@@ -1,109 +1,156 @@
 # CLAUDE.md — Fall Detection Project
 
-> Project-level AI instruction file. Read this first when working on this codebase.
+Project-level instruction file for AI agents working on this repository. Read this first.
 
----
+## Project
 
-## ⚠️ CRITICAL: External Memory
+**老年人跌倒检测系统 — Roadshow Demo**
 
-**This project's agent memory is stored in `Docs/Chat.md`.**  
-Always read `Docs/Chat.md` at the start of each session. It contains:
-- Current project state and progress
-- Architecture decisions and their rationale
-- Hardware constraints (RTX 3060 Ti 8GB)
-- Dataset strategy and known issues
-- Risk register and mitigations
-- Collaboration protocol with Lucas
+Goal: demonstrate a privacy-preserving elderly fall detection workflow using multi-view 3D pose and local Qwen3-VL review.
 
-**After any meaningful progress, update `Docs/Chat.md`** to reflect new state. Replace outdated information; do not append journal entries.
+Current architecture:
 
----
-
-## Project Overview
-
-**老年人跌倒检测系统** — Multi-view 3D fall detection system for elderly care roadshow demo.
-
-- **Timeline**: 20 days (2026-07-10 → 2026-07-30)
-- **Hardware target**: RTX 3060 Ti 8GB VRAM
-- **Primary spec**: `Docs/prompt.md` (all requirements, architecture, acceptance criteria)
-- **Current baseline**: Working 2D single-view system (UR Fall Dataset, BiLSTM+BiGRU, Precision 75%/Recall 83%) → Upgrading to 3-view 3D + LLM review
-
----
-
-## Architecture (Target)
-
-```
-3-view Video Input → YOLOv8n-pose Batch → 2D Keypoints
-    → Multi-view Triangulation → 3D Skeleton
-    → 3D Feature Engineering (10-dim) → BiLSTM+BiGRU Classifier
-    → 3-Class Output (Normal/Suspected/Fall)
-        ├─ Normal → No action
-        ├─ Fall (high confidence) → Alert
-        └─ Suspected → Qwen3-VL-8B Review → Final decision
+```text
+3-view video input / playmode
+  -> YOLOv8n-pose batch inference
+  -> multi-view triangulation
+  -> 3D skeleton and 10-D features
+  -> BiLSTM/BiGRU/Attention fall classifier
+  -> normal / suspected / fall
+  -> suspected event clip review with local Qwen3-VL
+  -> WebSocket community dashboard
 ```
 
-7 modules in `Docs/prompt.md` §二: Dataset, YOLOv8, Triangulation, Features, Classifier, LLM, Visualization.
+## Current Demo Status
 
----
+All P0-P3 roadshow tasks are implemented.
 
-## Key Files
+- P0 continuous client: `continuous_event_client.py`
+- No-camera playmode: `playmode_event_loop.py`
+- Monitor server: `monitor_server.py`
+- Dashboard: `web/monitor_dashboard.html`
+- LLM clip review: `review_llm_clip.py`, `qa_llm_clip_batch.py`
+- Current 3D checkpoint: `checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth`
+- Default thresholds: low `0.30`, high `0.40`
 
-| File/Dir | Purpose |
-|-----------|---------|
-| `Docs/prompt.md` | Complete requirements spec (187 lines) |
-| `Docs/Chat.md` | **Agent external memory — read first** |
-| `ensemble_inference.py` | Current 2D inference entry point |
-| `demo_video.py` | Current real-time demo |
-| `train_enhanced.py` | Training script (BiLSTM+BiGRU) |
-| `models/enhanced_lstm.py` | Model architecture definitions |
-| `extract_features_v3.py` | Feature extraction (MediaPipe) |
-| `extract_gmdcsa24.py` | Feature extraction (YOLOv8 batch) |
-| `yolov8n-pose.pt` | YOLOv8 pose weights |
-| `checkpoints/` | Trained model weights (8 enhanced runs) |
-| `features/` | Extracted .npy features (UR Fall) |
-| `dataset/` | UR Fall video split lists |
-| `requirements.txt` | Python dependencies |
+Current best 3D classifier notes:
 
----
+- Test split: 147 windows, fall ratio `0.3673`
+- AUC-ROC: `0.9747`
+- At threshold `0.40`: fall recall `1.000`, fall precision `0.818`, CM `[[81, 12], [0, 54]]`
+- At threshold `0.30`: fall recall `1.000`, fall precision `0.783`, CM `[[78, 15], [0, 54]]`
 
-## Commands
+## Privacy/Product Mechanism
+
+This project targets elderly-home cameras connected to community staff. Treat privacy as a product requirement, not just a demo limitation.
+
+- Process camera streams locally where possible.
+- Do not continuously upload or persist full video streams.
+- Keep a rolling in-memory buffer on the client.
+- Send an immediate `suspected` event without video when `0.30 <= p_fall < 0.40`.
+- Export/share only the latest 90-frame clip when a suspected event needs review.
+- Use the same `event_id` for initial suspected alert and final LLM update.
+- Direct `fall` events (`p_fall >= 0.40`) skip LLM by default.
+
+## Roadshow Commands
+
+Start monitor:
 
 ```bash
-# Evaluate current 2D ensemble model
-python ensemble_inference.py --eval
-
-# Real-time demo on a video
-python demo_video.py
-
-# Train enhanced model
-python train_enhanced.py
-
-# Extract features from UR Fall videos (YOLOv8)
-python extract_gmdcsa24.py
+python monitor_server.py --host 127.0.0.1 --port 8765
 ```
 
----
+Open:
 
-## Constraints & Rules
+```text
+http://127.0.0.1:8765/
+```
 
-1. **Honesty requirement** (from prompt.md §四): Never claim "99.9% accuracy". All metrics must state test conditions and dataset. Clearly separate "architecture design" from "current demo implementation".
+No-camera playmode, recommended for live roadshow:
 
-2. **Demo scope** (from prompt.md §背景): Don't over-engineer. No real cameras, no production security, no physical calibration rig. Use dataset video files as input.
+```bash
+python playmode_event_loop.py --source-video clips/s01_1050_90.mp4 --server-url ws://127.0.0.1:8765/ws/events
+```
 
-3. **3-class output**: Normal / Suspected / Fall (not binary). Thresholds must be configurable, not hardcoded.
+Dataset-backed continuous client:
 
-4. **Two independent validation lines**: Line A (3D reconstruction MPJPE) and Line B (fall classification metrics) are validated separately. Acknowledge this limitation honestly.
+```bash
+python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-frame 100 --force-p-fall 0.35 --server-url ws://127.0.0.1:8765/ws/events --stop-after-event
+```
 
-5. **VRAM budget**: 8GB total. Qwen3-VL-8B Q4_K_M (~5.4GB GGUF + ~1.7GB mmproj) is tight. Have Qwen3-VL-4B fallback ready.
+Fast smoke test without LLM or WebSocket:
 
-6. **Dual-model ensemble** (current system): Model A (high precision) + Model B (high recall), soft voting 0.5+0.5, threshold 0.70.
+```bash
+python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-frame 100 --force-p-fall 0.35 --no-llm --no-send --stop-after-event
+```
 
----
+LLM clip QA:
 
-## External Memory Protocol
+```bash
+python review_llm_clip.py --video clips/s01_1050_90.mp4
+python qa_llm_clip_batch.py --videos clips/s01_1050_90.mp4 clips/s01_0000_90_normal.mp4
+```
 
-1. **Session start**: Read `Docs/Chat.md`
-2. **Session end**: Update `Docs/Chat.md` with progress, decisions, blockers
-3. **Key decisions**: Record rationale in `Docs/Chat.md`
-4. **New files created**: Note in `Docs/Chat.md` under relevant module section
-5. **Status changes**: Update module status in `Docs/Chat.md`
+3D extraction / training / threshold sweep:
+
+```bash
+python extract_dataset_3d.py --device cuda --yolo-batch 32 --time-batch 64 --min-quality 0.15 --max-normal 300
+python train_3d.py --seed 42 --no-smote
+python sweep_threshold.py --split test --device cuda
+```
+
+## Important Files
+
+| Path | Purpose |
+| --- | --- |
+| `README.md` | User-facing runbook and demo explanation |
+| `continuous_event_client.py` | MCFD-backed continuous detector/client |
+| `playmode_event_loop.py` | No-camera demo loop |
+| `monitor_server.py` | Local FastAPI/WebSocket monitor server |
+| `web/monitor_dashboard.html` | Two-column staff dashboard |
+| `pipeline/clip_buffer.py` | In-memory rolling clip buffer |
+| `pipeline/event_schema.py` | Event JSON schema helper |
+| `pipeline/event_sender.py` | WebSocket event sender |
+| `pipeline/video_reader.py` | MCFD synchronized video reader |
+| `pipeline/pose_inference.py` | YOLOv8 pose detection and simple tracking |
+| `pipeline/calibration.py` | MCFD/Auvinet calibration approximation |
+| `pipeline/triangulation.py` | 3D skeleton triangulation and smoothing |
+| `pipeline/features_3d.py` | 10-D 3D feature extraction |
+| `pipeline/classifier.py` | 3D classifier wrapper and heuristic fallback |
+| `pipeline/llm_reviewer.py` | Qwen3-VL review logic |
+| `checkpoints/archive/enhanced_3d_20260712_185406/` | Current shipped 3D checkpoint |
+
+## Local Artifacts And Git Hygiene
+
+Do not commit:
+
+- `dataset/mcfd/`
+- `models/llm/*.gguf`
+- `features/3d/`
+- `clips/`
+- `results/llm_qa/`
+- `checkpoints/enhanced_3d_*`
+
+Commit and keep:
+
+- `yolov8n-pose.pt`
+- `checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth`
+- `checkpoints/archive/enhanced_3d_20260712_185406/history.json`
+
+## Demo Boundaries
+
+- Current demo uses MCFD dataset videos to simulate three cameras.
+- Real webcam/RTSP adapters are future work.
+- MCFD calibration and 3D reconstruction are demo-suitable approximations.
+- The dashboard is local/LAN only: no auth, TLS, database, retention policy, or audit trail yet.
+- Metrics must name dataset/split/test condition. Never claim production-grade or unsupported accuracy.
+
+## Working Rules For Agents
+
+- Keep code changes scoped to the requested task.
+- Prefer existing pipeline modules over new abstractions unless the new boundary is clearly useful.
+- Preserve privacy semantics: no continuous video upload/storage.
+- Keep thresholds configurable.
+- After meaningful project state changes, update this `CLAUDE.md` or `README.md`; there is no longer a separate `Docs/Chat.md` memory file.
+- Before committing, check `git status --short` and avoid adding ignored/generated artifacts.
+- Use Chinese commit messages in the existing style, e.g. `feat: ...`, `fix: ...`, `docs: ...`.
