@@ -19,11 +19,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 from contextlib import asynccontextmanager
 import json
 import os
 import sys
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -38,7 +38,7 @@ if sys.platform.startswith("win"):
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 
@@ -82,6 +82,26 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
+def parse_iso(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def apply_due_handled(event: dict[str, Any]) -> None:
+    due_at = parse_iso(event.get("handle_due_at"))
+    if not due_at or event.get("handled"):
+        return
+    if datetime.now(timezone.utc).astimezone() >= due_at:
+        event["handled"] = True
+        event["handled_at"] = due_at.isoformat(timespec="seconds")
+        event.pop("handle_requested_at", None)
+        event.pop("handle_due_at", None)
+
+
 def normalize_event(payload: dict[str, Any]) -> dict[str, Any]:
     """Normalize detector/demo payloads into dashboard-safe event records."""
     event = dict(payload)
@@ -96,8 +116,8 @@ def normalize_event(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(classifier, dict):
         classifier = {}
     classifier.setdefault("p_fall", event.pop("p_fall", None))
-    classifier.setdefault("threshold_low", 0.30)
-    classifier.setdefault("threshold_high", 0.40)
+    classifier.setdefault("threshold_low", 0.40)
+    classifier.setdefault("threshold_high", 1.0)
     event["classifier"] = classifier
 
     llm_review = event.get("llm_review")
@@ -115,11 +135,7 @@ def normalize_event(payload: dict[str, Any]) -> dict[str, Any]:
     event["_clip_url_raw"] = raw_clip_url
     event.setdefault("video_released", event.get("status") == "fall")
     event["clip_url"] = raw_clip_url if event.get("video_released") else None
-    event["clip_stream_url"] = (
-        f"/api/events/{event['event_id']}/clip-stream"
-        if raw_clip_url and event.get("video_released")
-        else None
-    )
+    event["clip_stream_url"] = None
 
     event.setdefault("handled", False)
     return event
@@ -161,6 +177,8 @@ async def add_event(payload: dict[str, Any]) -> dict[str, Any]:
     else:
         handled = existing.get("handled", False)
         handled_at = existing.get("handled_at")
+        handle_requested_at = existing.get("handle_requested_at")
+        handle_due_at = existing.get("handle_due_at")
         video_released = existing.get("video_released", False)
         incoming_video_released = incoming.get("video_released", False)
         video_requested_at = existing.get("video_requested_at")
@@ -172,6 +190,10 @@ async def add_event(payload: dict[str, Any]) -> dict[str, Any]:
             existing["timestamp"] = first_timestamp
         existing["updated_at"] = updated_at
         existing["handled"] = handled
+        if handle_requested_at:
+            existing["handle_requested_at"] = handle_requested_at
+        if handle_due_at:
+            existing["handle_due_at"] = handle_due_at
         existing["video_released"] = bool(
             video_released
             or incoming_video_released
@@ -183,14 +205,11 @@ async def add_event(payload: dict[str, Any]) -> dict[str, Any]:
             existing["video_release_at"] = video_release_at
         raw_clip_url = existing.get("_clip_url_raw")
         existing["clip_url"] = raw_clip_url if existing.get("video_released") else None
-        existing["clip_stream_url"] = (
-            f"/api/events/{existing['event_id']}/clip-stream"
-            if raw_clip_url and existing.get("video_released")
-            else None
-        )
+        existing["clip_stream_url"] = None
         if handled_at:
             existing["handled_at"] = handled_at
         event = existing
+    apply_due_handled(event)
     await broadcast({"type": "event", "event": event})
     return event
 
@@ -204,6 +223,8 @@ async def dashboard() -> HTMLResponse:
 
 @app.get("/api/events")
 async def list_events() -> JSONResponse:
+    for event in events:
+        apply_due_handled(event)
     return JSONResponse({"events": events})
 
 
@@ -217,8 +238,15 @@ async def post_event(payload: dict[str, Any]) -> JSONResponse:
 async def mark_handled(event_id: str) -> JSONResponse:
     for event in events:
         if event.get("event_id") == event_id:
-            event["handled"] = True
-            event["handled_at"] = now_iso()
+            apply_due_handled(event)
+            due_at = parse_iso(event.get("handle_due_at"))
+            if due_at and not event.get("handled"):
+                event.pop("handle_requested_at", None)
+                event.pop("handle_due_at", None)
+            elif not event.get("handled"):
+                now = datetime.now(timezone.utc).astimezone()
+                event["handle_requested_at"] = now.isoformat(timespec="seconds")
+                event["handle_due_at"] = (now + timedelta(seconds=30)).isoformat(timespec="seconds")
             await broadcast({"type": "handled", "event_id": event_id, "event": event})
             return JSONResponse({"ok": True, "event": event})
     return JSONResponse({"ok": False, "error": "event not found"}, status_code=404)
@@ -248,7 +276,7 @@ async def release_video(event_id: str) -> JSONResponse:
                 return JSONResponse({"ok": False, "error": "clip not available"}, status_code=404)
             event["video_released"] = True
             event["clip_url"] = raw_clip_url
-            event["clip_stream_url"] = f"/api/events/{event_id}/clip-stream"
+            event["clip_stream_url"] = None
             await broadcast({"type": "event", "event": event})
             return JSONResponse({"ok": True, "event": event})
     return JSONResponse({"ok": False, "error": "event not found"}, status_code=404)
@@ -305,64 +333,35 @@ async def clip_meta(event_id: str) -> JSONResponse:
     return JSONResponse({"ok": True, "meta": clip_meta_for_event(event, path)})
 
 
-@app.get("/api/events/{event_id}/clip-frame/{frame_index}")
-async def clip_frame(event_id: str, frame_index: int) -> Response:
+@app.get("/api/events/{event_id}/clip-frames")
+async def clip_frames(event_id: str) -> JSONResponse:
     event = next((item for item in events if item.get("event_id") == event_id), None)
     if not event or not event.get("video_released"):
-        return Response(status_code=403)
+        return JSONResponse({"ok": False, "error": "video not released"}, status_code=403)
     path = event_clip_path(event_id)
     if path is None or not path.exists():
-        return Response(status_code=404)
+        return JSONResponse({"ok": False, "error": "clip not found"}, status_code=404)
 
     cap = cv2.VideoCapture(str(path))
-    try:
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        if frame_count <= 0:
-            return Response(status_code=404)
-        idx = max(0, min(int(frame_index), frame_count - 1))
-        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-        ok, frame = cap.read()
-        if not ok:
-            return Response(status_code=404)
-        ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 86])
-        if not ok:
-            return Response(status_code=500)
-        return Response(content=encoded.tobytes(), media_type="image/jpeg")
-    finally:
-        cap.release()
-
-
-def mjpeg_frames(path: Path, playback_fps: float = 30.0):
-    cap = cv2.VideoCapture(str(path))
-    delay = 1.0 / max(playback_fps, 1e-6)
+    frames: list[str] = []
     try:
         while cap.isOpened():
             ok, frame = cap.read()
             if not ok:
                 break
             ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
-            if not ok:
-                continue
-            yield (
-                b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n"
-                + encoded.tobytes()
-                + b"\r\n"
-            )
-            time.sleep(delay)
+            if ok:
+                frames.append(base64.b64encode(encoded.tobytes()).decode("ascii"))
     finally:
         cap.release()
-
-
-@app.get("/api/events/{event_id}/clip-stream")
-async def clip_stream(event_id: str):
-    event = next((item for item in events if item.get("event_id") == event_id), None)
-    if not event or not event.get("video_released"):
-        return Response(status_code=403)
-    path = event_clip_path(event_id)
-    if path is None or not path.exists():
-        return Response(status_code=404)
-    return StreamingResponse(mjpeg_frames(path), media_type="multipart/x-mixed-replace; boundary=frame")
+    if not frames:
+        return JSONResponse({"ok": False, "error": "clip has no readable frames"}, status_code=404)
+    return JSONResponse({
+        "ok": True,
+        "meta": clip_meta_for_event(event, path),
+        "frames": frames,
+        "mime": "image/jpeg",
+    })
 
 
 @app.get("/favicon.ico")
@@ -386,8 +385,11 @@ async def dashboard_socket(ws: WebSocket) -> None:
                 event_id = str(message.get("event_id", ""))
                 for event in events:
                     if event.get("event_id") == event_id:
-                        event["handled"] = True
-                        event["handled_at"] = now_iso()
+                        apply_due_handled(event)
+                        if not event.get("handled"):
+                            now = datetime.now(timezone.utc).astimezone()
+                            event["handle_requested_at"] = now.isoformat(timespec="seconds")
+                            event["handle_due_at"] = (now + timedelta(seconds=30)).isoformat(timespec="seconds")
                         await broadcast({"type": "handled", "event_id": event_id, "event": event})
                         break
     except WebSocketDisconnect:

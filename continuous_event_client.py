@@ -24,9 +24,10 @@ import os
 import random
 import time
 from collections import deque
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 import cv2
@@ -110,8 +111,7 @@ def update_temporal_state(state: PersonState, skeleton: np.ndarray, fps: float) 
 
 
 def status_from_probability(p_fall: float, threshold_low: float, threshold_high: float) -> str:
-    if p_fall >= threshold_high:
-        return "fall"
+    _ = threshold_high
     if p_fall >= threshold_low:
         return "suspected"
     return "normal"
@@ -202,6 +202,153 @@ def send_or_print(payload: dict[str, Any], args: argparse.Namespace) -> None:
     print(f"[event:sent] ack={ack}")
 
 
+class LLMReviewManager:
+    """Single-worker LLM queue with one long-lived loaded reviewer.
+
+    The main detector loop submits suspected clips and keeps running. The
+    worker serializes Qwen3-VL requests so the model stays loaded once and
+    GPU/CPU memory is not thrashed by concurrent LLM calls.
+    """
+
+    def __init__(self, enabled: bool):
+        self._executor = (
+            ThreadPoolExecutor(max_workers=1, thread_name_prefix="llm-review")
+            if enabled
+            else None
+        )
+        self._pending: list[Future] = []
+
+    def submit(self, task: Callable[[], None]) -> Future | None:
+        if self._executor is None:
+            task()
+            return None
+        self._pending = [future for future in self._pending if not future.done()]
+        future = self._executor.submit(task)
+        future.add_done_callback(self._log_failure)
+        self._pending.append(future)
+        return future
+
+    def wait_all(self) -> None:
+        for future in list(self._pending):
+            future.result()
+        self._pending.clear()
+
+    def shutdown(self) -> None:
+        if self._executor is not None:
+            self._executor.shutdown(wait=False, cancel_futures=False)
+
+    @staticmethod
+    def _log_failure(future: Future) -> None:
+        try:
+            exc = future.exception()
+        except Exception as err:
+            print(f"[llm-manager] failed to inspect review task: {err}")
+            return
+        if exc is not None:
+            print(f"[llm-manager] review task failed: {exc}")
+
+
+def clip_meta_payload(clip_info: Any) -> dict[str, Any]:
+    return {
+        "frame_count": clip_info.frame_count,
+        "fps": clip_info.fps,
+        "start_frame": clip_info.start_frame,
+        "end_frame": clip_info.end_frame,
+        "start_timestamp_sec": round(clip_info.start_timestamp_sec, 3),
+        "end_timestamp_sec": round(clip_info.end_timestamp_sec, 3),
+        "duration_sec": round(
+            (clip_info.frame_count - 1) / max(clip_info.fps, 1e-6),
+            3,
+        ),
+    }
+
+
+def emit_suspected_event(
+    *,
+    args: argparse.Namespace,
+    clip_buffer: RollingClipBuffer,
+    reviewer: LLMFallReviewer | None,
+    review_manager: LLMReviewManager,
+    scenario: int,
+    frame_index: int,
+    track_id: int | None,
+    p_fall: float,
+    quality: float | None,
+    trigger_reason: str,
+) -> Future | None:
+    """Send suspected immediately, then run LLM review without blocking detection."""
+    output_dir = Path(args.clip_dir)
+    event_id = f"event_{time.strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
+    initial_payload = build_event_payload(
+        client_id=args.client_id,
+        device_id=args.device_id,
+        address=args.address,
+        status="suspected",
+        p_fall=p_fall,
+        threshold_low=args.threshold_low,
+        threshold_high=args.threshold_high,
+        clip_path=None,
+        scenario=scenario,
+        frame_index=frame_index,
+        track_id=track_id,
+        quality=quality,
+        llm_review={
+            "status": "pending_review",
+            "is_fall": None,
+            "confidence": None,
+            "reason": "Suspected fall detected by 3D classifier; preparing 90-frame clip for LLM review.",
+        },
+        trigger_reason=trigger_reason,
+        event_id=event_id,
+    )
+    initial_payload["video_released"] = False
+    initial_payload["event_timestamp_sec"] = round(frame_index / max(args.fps, 1e-6), 3)
+    send_or_print(initial_payload, args)
+
+    output_path = make_clip_path(scenario, frame_index, "suspected", output_dir)
+    clip_info = clip_buffer.export_latest_info(output_path, frames=args.event_clip_frames, fps=args.clip_fps)
+    clip_path = None if clip_info is None else clip_info.path
+
+    def review_and_send() -> None:
+        if clip_info is None:
+            final_status = "fall"
+            llm_review = {
+                "status": "fall",
+                "is_fall": True,
+                "confidence": None,
+                "reason": "Less than 90 buffered frames available; escalated by policy.",
+            }
+        else:
+            llm_review = review_clip(reviewer, clip_path, args)
+            reviewed_status = llm_review.get("status", "suspected")
+            final_status = "fall" if reviewed_status == "fall" else "suspected"
+
+        final_payload = build_event_payload(
+            client_id=args.client_id,
+            device_id=args.device_id,
+            address=args.address,
+            status=final_status,
+            p_fall=p_fall,
+            threshold_low=args.threshold_low,
+            threshold_high=args.threshold_high,
+            clip_path=clip_path,
+            scenario=scenario,
+            frame_index=frame_index,
+            track_id=track_id,
+            quality=quality,
+            llm_review=llm_review,
+            trigger_reason=trigger_reason,
+            event_id=event_id,
+        )
+        final_payload["video_released"] = final_status == "fall" and clip_path is not None
+        final_payload["event_timestamp_sec"] = round(frame_index / max(args.fps, 1e-6), 3)
+        if clip_info is not None:
+            final_payload["clip_meta"] = clip_meta_payload(clip_info)
+        send_or_print(final_payload, args)
+
+    return review_manager.submit(review_and_send)
+
+
 def build_event_sequence_from_buffer(
     *,
     args: argparse.Namespace,
@@ -214,6 +361,7 @@ def build_event_sequence_from_buffer(
     status: str,
     quality: float | None,
     trigger_reason: str,
+    pre_send: Callable[[dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
     """Create one or more payloads for a trigger using the shared P0 policy.
 
@@ -257,7 +405,10 @@ def build_event_sequence_from_buffer(
         )
         initial_payload["video_released"] = False
         initial_payload["event_timestamp_sec"] = round(frame_index / max(args.fps, 1e-6), 3)
-        payloads.append(initial_payload)
+        if pre_send is None:
+            payloads.append(initial_payload)
+        else:
+            pre_send(initial_payload)
         output_path = make_clip_path(scenario, frame_index, status, output_dir)
         clip_info = clip_buffer.export_latest_info(output_path, frames=args.event_clip_frames, fps=args.clip_fps)
         clip_path = None if clip_info is None else clip_info.path
@@ -305,21 +456,10 @@ def build_event_sequence_from_buffer(
         trigger_reason=trigger_reason,
         event_id=event_id,
     )
-    final_payload["video_released"] = final_status == "fall"
+    final_payload["video_released"] = final_status == "fall" and clip_path is not None
     final_payload["event_timestamp_sec"] = round(frame_index / max(args.fps, 1e-6), 3)
     if clip_info is not None:
-        final_payload["clip_meta"] = {
-            "frame_count": clip_info.frame_count,
-            "fps": clip_info.fps,
-            "start_frame": clip_info.start_frame,
-            "end_frame": clip_info.end_frame,
-            "start_timestamp_sec": round(clip_info.start_timestamp_sec, 3),
-            "end_timestamp_sec": round(clip_info.end_timestamp_sec, 3),
-            "duration_sec": round(
-                (clip_info.frame_count - 1) / max(clip_info.fps, 1e-6),
-                3,
-            ),
-        }
+        final_payload["clip_meta"] = clip_meta_payload(clip_info)
     payloads.append(final_payload)
     return payloads
 
@@ -335,181 +475,239 @@ def run_client(args: argparse.Namespace) -> None:
     tri = Triangulator(projections)
     classifier = load_classifier(args)
     reviewer = load_reviewer(args)
+    review_manager = LLMReviewManager(enabled=args.llm)
+    pending_reviews: list[Future] = []
     rng = random.Random(args.seed)
     scenario_pool = args.scenarios or [args.scenario]
     scenario_index = 0
     start_time = time.time()
     print(
         f"[client] scenarios={scenario_pool} cameras={camera_ids} "
-        f"thresholds={args.threshold_low:.2f}/{args.threshold_high:.2f} "
+        f"review_threshold={args.threshold_low:.2f} "
         f"buffer={args.buffer_frames} export={args.event_clip_frames}@{args.clip_fps:g}fps"
     )
 
-    while True:
-        scenario = rng.choice(scenario_pool) if args.random_scenarios else scenario_pool[scenario_index % len(scenario_pool)]
-        scenario_index += 1
-        scenario_start = scenario_start_frame(args, data_root, scenario, rng)
-        scenario_end = None if args.max_frames is None else scenario_start + args.max_frames
-        print(f"[client] starting scenario={scenario} start_frame={scenario_start}")
-
-        tracker = MultiPersonTracker(num_views=len(camera_ids))
-        clip_buffer = RollingClipBuffer(max_frames=args.buffer_frames, fps=args.fps)
-        states: dict[int, PersonState] = {}
-        forced_event_sent = False
-        last_frame_idx = scenario_start
-
-        with MCFDReader(
-            str(data_root),
-            scenario,
-            camera_ids,
-            start_frame=scenario_start,
-            end_frame=scenario_end,
-            undistort=False,
-        ) as reader:
-            for frames in reader:
-                frame_idx = reader.ref_start_frame + reader.current_frame - 1
-                last_frame_idx = frame_idx
-                if args.realtime:
-                    time.sleep(max(0.0, 1.0 / args.fps))
-
-                collage = make_multiview_collage(frames, labels=[f"Cam{cid}" for cid in camera_ids])
-                clip_buffer.append(frame_idx, collage)
-
-                raw_persons = detector.infer_batch_all(frames)
-                tracked = tracker.update(raw_persons)
-                view0_tracks = tracked[0] if tracked else []
-                if args.max_people > 0:
-                    view0_tracks = view0_tracks[:args.max_people]
-
-                for pidx, (track_id, kp_view0) in enumerate(view0_tracks):
-                    state = states.setdefault(track_id, PersonState())
-                    person_kps_raw = []
-                    for v in range(len(tracked)):
-                        v_tracks = tracked[v]
-                        if v == 0:
-                            person_kps_raw.append(kp_view0)
-                        elif pidx < len(v_tracks):
-                            person_kps_raw.append(v_tracks[pidx][1])
+    try:
+        while True:
+            scenario = rng.choice(scenario_pool) if args.random_scenarios else scenario_pool[scenario_index % len(scenario_pool)]
+            scenario_index += 1
+            scenario_start = scenario_start_frame(args, data_root, scenario, rng)
+            scenario_end = None if args.max_frames is None else scenario_start + args.max_frames
+            print(f"[client] starting scenario={scenario} start_frame={scenario_start}")
+    
+            tracker = MultiPersonTracker(num_views=len(camera_ids))
+            clip_buffer = RollingClipBuffer(max_frames=args.buffer_frames, fps=args.fps)
+            states: dict[int, PersonState] = {}
+            forced_event_sent = False
+            last_frame_idx = scenario_start
+    
+            with MCFDReader(
+                str(data_root),
+                scenario,
+                camera_ids,
+                start_frame=scenario_start,
+                end_frame=scenario_end,
+                undistort=False,
+            ) as reader:
+                for frames in reader:
+                    frame_idx = reader.ref_start_frame + reader.current_frame - 1
+                    last_frame_idx = frame_idx
+                    if args.realtime:
+                        time.sleep(max(0.0, 1.0 / args.fps))
+    
+                    collage = make_multiview_collage(frames, labels=[f"Cam{cid}" for cid in camera_ids])
+                    clip_buffer.append(frame_idx, collage)
+    
+                    raw_persons = detector.infer_batch_all(frames)
+                    tracked = tracker.update(raw_persons)
+                    view0_tracks = tracked[0] if tracked else []
+                    if args.max_people > 0:
+                        view0_tracks = view0_tracks[:args.max_people]
+    
+                    for pidx, (track_id, kp_view0) in enumerate(view0_tracks):
+                        state = states.setdefault(track_id, PersonState())
+                        person_kps_raw = []
+                        for v in range(len(tracked)):
+                            v_tracks = tracked[v]
+                            if v == 0:
+                                person_kps_raw.append(kp_view0)
+                            elif pidx < len(v_tracks):
+                                person_kps_raw.append(v_tracks[pidx][1])
+                            else:
+                                person_kps_raw.append(np.zeros((17, 3), dtype=np.float32))
+    
+                        person_kps = [
+                            undistort_keypoints(kp, camera_ids[v])
+                            for v, kp in enumerate(person_kps_raw)
+                        ]
+                        raw_skel = tri.triangulate(person_kps)
+                        quality = tri.compute_quality(person_kps, raw_skel)
+                        skel = state.smoother.update(raw_skel)
+                        accepted, gate_reason = temporal_gate(
+                            state,
+                            skel,
+                            quality,
+                            fps=args.fps,
+                            max_abs_speed=args.max_centroid_speed,
+                            max_speed_multiplier=args.max_speed_multiplier,
+                            min_quality=args.min_temporal_quality,
+                        )
+                        if not accepted:
+                            state.rejected_frames += 1
+                            if args.verbose:
+                                print(f"[gate] frame={frame_idx} track={track_id} rejected: {gate_reason}")
+                            continue
+    
+                        update_temporal_state(state, skel, fps=args.fps)
+                        state.qualities.append(quality)
+                        prev_skel = state.skeletons[-1] if state.skeletons else None
+                        features = compute_features(skel, prev_skel, floor_estimator=state.floor_estimator)
+                        if features is not None:
+                            features[3] = features[2] - state.features[-1][2] if state.features else 0.0
+                            state.features.append(features)
+                        state.skeletons.append(skel.copy())
+    
+                        if len(state.features) < 20 or frame_idx % args.classify_stride != 0:
+                            continue
+    
+                        window = np.array(list(state.features)[-20:])
+                        cls_result = classifier.predict(window)
+                        p_fall = float(cls_result["fall_prob"])
+                        status = status_from_probability(p_fall, args.threshold_low, args.threshold_high)
+                        mean_quality = float(np.mean([q["score"] for q in list(state.qualities)[-20:]]))
+                        if mean_quality < args.quality_threshold and status == "fall":
+                            status = "suspected"
+                            gate_reason = f"fall downgraded by recent quality={mean_quality:.2f}"
+    
+                        forced = args.force_trigger_frame is not None and frame_idx >= args.force_trigger_frame
+                        if forced and state.last_event_frame < 0:
+                            p_fall = args.force_p_fall
+                            status = status_from_probability(p_fall, args.threshold_low, args.threshold_high)
+                            gate_reason = "forced play trigger for smoke/demo"
+    
+                        state.status = status
+                        if status == "normal":
+                            continue
+                        if frame_idx - state.last_event_frame < args.event_cooldown_frames:
+                            continue
+                        if len(clip_buffer) < args.event_clip_frames:
+                            if args.verbose:
+                                print(
+                                    f"[event] frame={frame_idx} status={status} waiting for "
+                                    f"{args.event_clip_frames} buffered frames ({len(clip_buffer)} ready)"
+                                )
+                            continue
+    
+                        trigger_reason = (
+                            f"classifier p_fall={p_fall:.3f}; status={status}; "
+                            f"quality={mean_quality:.2f}; {gate_reason}"
+                        )
+                        if status == "suspected":
+                            future = emit_suspected_event(
+                                args=args,
+                                clip_buffer=clip_buffer,
+                                reviewer=reviewer,
+                                review_manager=review_manager,
+                                scenario=scenario,
+                                frame_index=frame_idx,
+                                track_id=track_id,
+                                p_fall=p_fall,
+                                quality=mean_quality,
+                                trigger_reason=trigger_reason,
+                            )
+                            if future is not None:
+                                pending_reviews.append(future)
                         else:
-                            person_kps_raw.append(np.zeros((17, 3), dtype=np.float32))
-
-                    person_kps = [
-                        undistort_keypoints(kp, camera_ids[v])
-                        for v, kp in enumerate(person_kps_raw)
-                    ]
-                    raw_skel = tri.triangulate(person_kps)
-                    quality = tri.compute_quality(person_kps, raw_skel)
-                    skel = state.smoother.update(raw_skel)
-                    accepted, gate_reason = temporal_gate(
-                        state,
-                        skel,
-                        quality,
-                        fps=args.fps,
-                        max_abs_speed=args.max_centroid_speed,
-                        max_speed_multiplier=args.max_speed_multiplier,
-                        min_quality=args.min_temporal_quality,
-                    )
-                    if not accepted:
-                        state.rejected_frames += 1
-                        if args.verbose:
-                            print(f"[gate] frame={frame_idx} track={track_id} rejected: {gate_reason}")
-                        continue
-
-                    update_temporal_state(state, skel, fps=args.fps)
-                    state.qualities.append(quality)
-                    prev_skel = state.skeletons[-1] if state.skeletons else None
-                    features = compute_features(skel, prev_skel, floor_estimator=state.floor_estimator)
-                    if features is not None:
-                        features[3] = features[2] - state.features[-1][2] if state.features else 0.0
-                        state.features.append(features)
-                    state.skeletons.append(skel.copy())
-
-                    if len(state.features) < 20 or frame_idx % args.classify_stride != 0:
-                        continue
-
-                    window = np.array(list(state.features)[-20:])
-                    cls_result = classifier.predict(window)
-                    p_fall = float(cls_result["fall_prob"])
-                    status = status_from_probability(p_fall, args.threshold_low, args.threshold_high)
-                    mean_quality = float(np.mean([q["score"] for q in list(state.qualities)[-20:]]))
-                    if mean_quality < args.quality_threshold and status == "fall":
-                        status = "suspected"
-                        gate_reason = f"fall downgraded by recent quality={mean_quality:.2f}"
-
-                    forced = args.force_trigger_frame is not None and frame_idx >= args.force_trigger_frame
-                    if forced and state.last_event_frame < 0:
+                            payloads = build_event_sequence_from_buffer(
+                                args=args,
+                                clip_buffer=clip_buffer,
+                                reviewer=reviewer,
+                                scenario=scenario,
+                                frame_index=frame_idx,
+                                track_id=track_id,
+                                p_fall=p_fall,
+                                status=status,
+                                quality=mean_quality,
+                                trigger_reason=trigger_reason,
+                            )
+                            for payload in payloads:
+                                send_or_print(payload, args)
+                        state.last_event_frame = frame_idx
+                        if forced:
+                            forced_event_sent = True
+    
+                        if args.stop_after_event:
+                            for future in pending_reviews:
+                                future.result()
+                            elapsed = time.time() - start_time
+                            print(f"[client] stopped after first event at frame={frame_idx}, elapsed={elapsed:.1f}s")
+                            return
+    
+                    if (
+                        args.force_trigger_frame is not None
+                        and not forced_event_sent
+                        and frame_idx >= args.force_trigger_frame
+                    ):
                         p_fall = args.force_p_fall
                         status = status_from_probability(p_fall, args.threshold_low, args.threshold_high)
-                        gate_reason = "forced play trigger for smoke/demo"
-
-                    state.status = status
-                    if status == "normal":
-                        continue
-                    if frame_idx - state.last_event_frame < args.event_cooldown_frames:
-                        continue
-
-                    trigger_reason = (
-                        f"classifier p_fall={p_fall:.3f}; status={status}; "
-                        f"quality={mean_quality:.2f}; {gate_reason}"
-                    )
-                    payloads = build_event_sequence_from_buffer(
-                        args=args,
-                        clip_buffer=clip_buffer,
-                        reviewer=reviewer,
-                        scenario=scenario,
-                        frame_index=frame_idx,
-                        track_id=track_id,
-                        p_fall=p_fall,
-                        status=status,
-                        quality=mean_quality,
-                        trigger_reason=trigger_reason,
-                    )
-                    for payload in payloads:
-                        send_or_print(payload, args)
-                    state.last_event_frame = frame_idx
-                    if forced:
+                        if len(clip_buffer) < args.event_clip_frames:
+                            if args.verbose:
+                                print(
+                                    f"[event] frame={frame_idx} forced trigger waiting for "
+                                    f"{args.event_clip_frames} buffered frames ({len(clip_buffer)} ready)"
+                                )
+                            continue
+                        if status == "suspected":
+                            future = emit_suspected_event(
+                                args=args,
+                                clip_buffer=clip_buffer,
+                                reviewer=reviewer,
+                                review_manager=review_manager,
+                                scenario=scenario,
+                                frame_index=frame_idx,
+                                track_id=None,
+                                p_fall=p_fall,
+                                quality=None,
+                                trigger_reason="forced trigger before classifier produced a window",
+                            )
+                            if future is not None:
+                                pending_reviews.append(future)
+                        else:
+                            payloads = build_event_sequence_from_buffer(
+                                args=args,
+                                clip_buffer=clip_buffer,
+                                reviewer=reviewer,
+                                scenario=scenario,
+                                frame_index=frame_idx,
+                                track_id=None,
+                                p_fall=p_fall,
+                                status=status,
+                                quality=None,
+                                trigger_reason="forced trigger before classifier produced a window",
+                            )
+                            for payload in payloads:
+                                send_or_print(payload, args)
                         forced_event_sent = True
+                        if args.stop_after_event:
+                            for future in pending_reviews:
+                                future.result()
+                            elapsed = time.time() - start_time
+                            print(f"[client] stopped after forced event at frame={frame_idx}, elapsed={elapsed:.1f}s")
+                            return
+    
+                    if args.log_every and frame_idx % args.log_every == 0:
+                        print(f"[client] frame={frame_idx} buffer={len(clip_buffer)} tracks={len(states)}")
+    
+            print(f"[client] scenario={scenario} complete last_frame={last_frame_idx}; resetting 3D state")
+            if not args.roadshow_loop:
+                break
 
-                    if args.stop_after_event:
-                        elapsed = time.time() - start_time
-                        print(f"[client] stopped after first event at frame={frame_idx}, elapsed={elapsed:.1f}s")
-                        return
-
-                if (
-                    args.force_trigger_frame is not None
-                    and not forced_event_sent
-                    and frame_idx >= args.force_trigger_frame
-                ):
-                    p_fall = args.force_p_fall
-                    status = status_from_probability(p_fall, args.threshold_low, args.threshold_high)
-                    payloads = build_event_sequence_from_buffer(
-                        args=args,
-                        clip_buffer=clip_buffer,
-                        reviewer=reviewer,
-                        scenario=scenario,
-                        frame_index=frame_idx,
-                        track_id=None,
-                        p_fall=p_fall,
-                        status=status,
-                        quality=None,
-                        trigger_reason="forced trigger before classifier produced a window",
-                    )
-                    for payload in payloads:
-                        send_or_print(payload, args)
-                    forced_event_sent = True
-                    if args.stop_after_event:
-                        elapsed = time.time() - start_time
-                        print(f"[client] stopped after forced event at frame={frame_idx}, elapsed={elapsed:.1f}s")
-                        return
-
-                if args.log_every and frame_idx % args.log_every == 0:
-                    print(f"[client] frame={frame_idx} buffer={len(clip_buffer)} tracks={len(states)}")
-
-        print(f"[client] scenario={scenario} complete last_frame={last_frame_idx}; resetting 3D state")
-        if not args.roadshow_loop:
-            break
-
-    print("[client] complete")
+        for future in pending_reviews:
+            future.result()
+        review_manager.wait_all()
+        print("[client] complete")
+    finally:
+        review_manager.shutdown()
 
 
 def main() -> None:
@@ -533,7 +731,8 @@ def main() -> None:
     parser.add_argument("--realtime", action="store_true")
     parser.add_argument("--checkpoint", default=str(DEFAULT_3D_CHECKPOINT))
     parser.add_argument("--threshold-low", type=float, default=0.40)
-    parser.add_argument("--threshold-high", type=float, default=0.80)
+    parser.add_argument("--threshold-high", type=float, default=1.0,
+                        help="Metadata only in current demo policy; all p_fall >= threshold-low goes to LLM review")
     parser.add_argument("--quality-threshold", type=float, default=0.45)
     parser.add_argument("--min-temporal-quality", type=float, default=0.15)
     parser.add_argument("--max-centroid-speed", type=float, default=25.0)

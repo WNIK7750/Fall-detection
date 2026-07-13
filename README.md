@@ -106,6 +106,7 @@ Dashboard event policy:
 - `suspected`: first sends an alert without video, then exports a clip for local Qwen3-VL review.
 - LLM says fall: same `event_id` is updated to `fall`; the old suspected card disappears and the Fall card shows video.
 - LLM says not fall: same event stays in the Suspected column as manual review. Staff can click `Request video`; after 30 seconds the video preview is released for human review.
+- Dashboard playback does not stream one frame per request. Released clips are loaded through one `/clip-frames` request into the browser, then played locally with a play/pause button and progress bar.
 
 ### 4. LLM clip 复核单测
 
@@ -132,8 +133,9 @@ Validation notes:
 Runtime policy:
 
 - `p_fall < 0.40`: normal, no event
-- `0.40 <= p_fall < 0.80`: suspected, send immediate alert, export 90-frame clip, sample every 10 frames for Qwen3-VL
-- `p_fall >= 0.80`: direct fall alert, export and release clip, skip LLM
+- `p_fall >= 0.40`: suspected, send immediate alert, export 90-frame clip, sample every 10 frames for Qwen3-VL
+- LLM says fall: update the same `event_id` to `fall` and release the clip
+- Events are emitted only after the rolling buffer has at least 90 frames, so released fall alerts have a complete 3-second evidence clip.
 
 ## Setup
 

@@ -124,6 +124,37 @@
       color: #ffffff;
     }
 
+    button.pending {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+      color: #64748b;
+      cursor: not-allowed;
+    }
+
+    button.warn {
+      background: #fef3c7;
+      border-color: #f59e0b;
+      color: #92400e;
+    }
+
+    button.suspect {
+      background: var(--suspected);
+      border-color: var(--suspected);
+      color: #ffffff;
+    }
+
+    button.suspect-warn {
+      background: #fef3c7;
+      border-color: var(--suspected);
+      color: #854d0e;
+    }
+
+    button.danger {
+      background: var(--fall);
+      border-color: var(--fall);
+      color: #ffffff;
+    }
+
     .columns {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -515,9 +546,10 @@
     let events = [];
     let socket = null;
     let reconnectTimer = null;
+    const frameCache = new Map();
     let player = {
       timer: null,
-      eventId: null,
+      frames: [],
       frameIndex: 0,
       frameCount: 0,
       fps: 30,
@@ -555,20 +587,43 @@
       return Date.now() >= Date.parse(event.video_release_at);
     }
 
+    function hasVideoCountdown(event) {
+      if (event.video_released || !event.video_release_at) return false;
+      return Date.now() < Date.parse(event.video_release_at);
+    }
+
+    function handleRemaining(event) {
+      if (!event.handle_due_at || event.handled) return 0;
+      return Math.max(0, Math.ceil((Date.parse(event.handle_due_at) - Date.now()) / 1000));
+    }
+
+    function isHandlePending(event) {
+      return handleRemaining(event) > 0;
+    }
+
+    function hasHandleTimer(event) {
+      return Boolean(event.handle_due_at && !event.handled);
+    }
+
+    function isEffectivelyHandled(event) {
+      return event.handled || Boolean(event.handle_due_at && Date.now() >= Date.parse(event.handle_due_at));
+    }
+
     function render() {
-      const openEvents = events.filter((event) => !event.handled);
+      const openEvents = events.filter((event) => !isEffectivelyHandled(event));
       counts.total.textContent = events.length;
       counts.open.textContent = openEvents.length;
       counts.fall.textContent = events.filter((event) => event.status === 'fall').length;
       counts.suspected.textContent = events.filter((event) => event.status === 'suspected').length;
 
       latestEventsEl.innerHTML = renderLatest(events.slice(0, 6));
-      const suspectedEvents = events.filter((event) => event.status === 'suspected' && !event.handled);
-      const fallEvents = events.filter((event) => event.status === 'fall' && !event.handled);
+      const suspectedEvents = events.filter((event) => event.status === 'suspected' && !isEffectivelyHandled(event));
+      const fallEvents = events.filter((event) => event.status === 'fall' && !isEffectivelyHandled(event));
       suspectedColumnCountEl.textContent = `${suspectedEvents.length} active`;
       fallColumnCountEl.textContent = `${fallEvents.length} active`;
       suspectedEventsEl.innerHTML = renderList(suspectedEvents, 'No suspected events.');
       fallEventsEl.innerHTML = renderList(fallEvents, 'No fall alerts.');
+      prefetchReleasedVideos();
     }
 
     function renderLatest(list) {
@@ -604,9 +659,9 @@
         const status = event.status || 'suspected';
         const llm = event.llm_review || {};
         const classifier = event.classifier || {};
-        const handled = event.handled ? ' handled' : '';
+        const handled = isEffectivelyHandled(event) ? ' handled' : '';
         const clip = renderVideoPane(event);
-        const handledBadge = event.handled ? '<span class="badge handled">Handled</span>' : '';
+        const handledBadge = isEffectivelyHandled(event) ? '<span class="badge handled">Handled</span>' : '';
         const actions = renderActions(event);
 
         return `
@@ -638,7 +693,8 @@
     }
 
     function renderVideoPane(event) {
-      if (event.clip_stream_url || event.clip_url) {
+      const releasedClip = event.clip_url || (event.video_released ? event._clip_url_raw : null);
+      if (releasedClip) {
         return `
           <button class="video-button" data-open-video="${escapeHtml(event.event_id)}">
             <span><strong>Open video</strong>Click to view event clip</span>
@@ -649,21 +705,33 @@
     }
 
     function renderActions(event) {
-      if (event.handled) return '<button disabled>Handled</button>';
+      if (isEffectivelyHandled(event)) return '<button disabled>Handled</button>';
       if (event.status === 'fall') {
-        return `<button class="primary" data-handle="${escapeHtml(event.event_id)}">Mark handled</button>`;
+        const remaining = handleRemaining(event);
+        if (remaining > 0) {
+          return `<button class="warn" data-handle="${escapeHtml(event.event_id)}">Cancel handle · ${remaining}s</button>`;
+        }
+        return `<button class="danger" data-handle="${escapeHtml(event.event_id)}">Mark handled</button>`;
+      }
+      const llm = event.llm_review || {};
+      if (llm.status === 'pending_review' || !event._clip_url_raw) {
+        return '<button class="pending" disabled>LLM reviewing</button>';
       }
       if (!event.clip_url && !event.clip_stream_url && event._clip_url_raw) {
         if (event.video_release_at) {
           const remaining = Math.max(0, Math.ceil((Date.parse(event.video_release_at) - Date.now()) / 1000));
           if (remaining > 0) {
-            return `<button disabled>Video in ${remaining}s</button>`;
+            return `<button class="pending" disabled>Video in ${remaining}s</button>`;
           }
           return `<button class="primary" data-release-video="${escapeHtml(event.event_id)}">View video</button>`;
         }
         return `<button class="primary" data-request-video="${escapeHtml(event.event_id)}">Request video</button>`;
       }
-      return `<button class="primary" data-handle="${escapeHtml(event.event_id)}">Mark handled</button>`;
+      const remaining = handleRemaining(event);
+      if (remaining > 0) {
+        return `<button class="suspect-warn" data-handle="${escapeHtml(event.event_id)}">Cancel handle · ${remaining}s</button>`;
+      }
+      return `<button class="suspect" data-handle="${escapeHtml(event.event_id)}">Mark handled</button>`;
     }
 
     async function reloadEvents() {
@@ -690,21 +758,52 @@
       }
     }
 
+    function prefetchReleasedVideos() {
+      events
+        .filter((event) => (event.clip_url || (event.video_released && event._clip_url_raw)) && !frameCache.has(event.event_id))
+        .slice(0, 8)
+        .forEach((event) => {
+          ensureVideoFrames(event.event_id).catch(() => {});
+        });
+    }
+
+    async function ensureVideoFrames(eventId) {
+      const cached = frameCache.get(eventId);
+      if (cached) return cached;
+      const pending = fetch(`/api/events/${encodeURIComponent(eventId)}/clip-frames`)
+        .then((response) => response.json())
+        .then((data) => {
+          if (!data.ok) throw new Error(data.error || 'video unavailable');
+          const mime = data.mime || 'image/jpeg';
+          const frames = (data.frames || []).map((frame) => `data:${mime};base64,${frame}`);
+          const loaded = { meta: data.meta || {}, frames };
+          frameCache.set(eventId, loaded);
+          return loaded;
+        })
+        .catch((error) => {
+          frameCache.delete(eventId);
+          throw error;
+        });
+      frameCache.set(eventId, pending);
+      return pending;
+    }
+
     async function openVideo(eventId) {
       const event = events.find((item) => item.event_id === eventId);
       if (!event) return;
-      const clipUrl = event.clip_url;
+      const clipUrl = event.clip_url || (event.video_released ? event._clip_url_raw : null);
       if (!clipUrl) return;
       modalTitle.textContent = `${event.status || 'event'} · ${event.address || event.event_id}`;
-      const response = await fetch(`/api/events/${encodeURIComponent(eventId)}/clip-meta`);
-      const data = await response.json();
-      if (!data.ok) return;
+      modalBody.innerHTML = '<div class="empty-video">Loading video...</div>';
+      videoModal.classList.add('open');
+      videoModal.setAttribute('aria-hidden', 'false');
+      const data = await ensureVideoFrames(eventId);
       const meta = data.meta || {};
       player = {
         timer: null,
-        eventId,
+        frames: data.frames || [],
         frameIndex: 0,
-        frameCount: Math.max(1, Number(meta.frame_count || 1)),
+        frameCount: Math.max(1, (data.frames || []).length),
         fps: Math.max(1, Number(meta.fps || 30)),
         playing: true
       };
@@ -718,11 +817,9 @@
         <div class="player-meta">
           clip ${escapeHtml(meta.start_timestamp_sec ?? 'n/a')}s-${escapeHtml(meta.end_timestamp_sec ?? 'n/a')}s ·
           frames ${escapeHtml(meta.start_frame ?? 'n/a')}-${escapeHtml(meta.end_frame ?? 'n/a')} ·
-          ${player.frameCount} frames @ ${player.fps.toFixed(1)} fps
+          ${escapeHtml(meta.frame_count ?? 'n/a')} frames @ ${escapeHtml(meta.fps ?? 'n/a')} fps
         </div>
       `;
-      videoModal.classList.add('open');
-      videoModal.setAttribute('aria-hidden', 'false');
       document.getElementById('playPauseButton').addEventListener('click', togglePlayer);
       renderPlayerFrame();
       startPlayer();
@@ -730,6 +827,7 @@
 
     function closeVideo() {
       stopPlayer();
+      player = { timer: null, frames: [], frameIndex: 0, frameCount: 0, fps: 30, playing: false };
       videoModal.classList.remove('open');
       videoModal.setAttribute('aria-hidden', 'true');
       modalBody.innerHTML = '';
@@ -739,15 +837,15 @@
       const frame = document.getElementById('modalFrame');
       const progress = document.getElementById('progressFill');
       const counter = document.getElementById('frameCounter');
-      if (!frame || !progress || !counter || !player.eventId) return;
-      frame.src = `/api/events/${encodeURIComponent(player.eventId)}/clip-frame/${player.frameIndex}?t=${Date.now()}`;
+      if (!frame || !progress || !counter || !player.frames.length) return;
+      frame.src = player.frames[player.frameIndex];
       const percent = ((player.frameIndex + 1) / player.frameCount) * 100;
       progress.style.width = `${Math.max(0, Math.min(100, percent))}%`;
       counter.textContent = `${player.frameIndex + 1} / ${player.frameCount}`;
     }
 
     function stepPlayer() {
-      if (!player.playing) return;
+      if (!player.playing || !player.frames.length) return;
       player.frameIndex = (player.frameIndex + 1) % player.frameCount;
       renderPlayerFrame();
     }
@@ -822,7 +920,7 @@
 
     reloadButton.addEventListener('click', reloadEvents);
     setInterval(() => {
-      if (events.some(canReleaseVideo)) render();
+      if (events.some((event) => canReleaseVideo(event) || hasVideoCountdown(event) || hasHandleTimer(event))) render();
     }, 1000);
     reloadEvents().catch(() => {});
     connect();

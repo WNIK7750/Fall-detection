@@ -30,8 +30,10 @@ All P0-P3 roadshow tasks are implemented.
 - Monitor server: `monitor_server.py`
 - Dashboard: `web/monitor_dashboard.html`
 - LLM clip review: `scripts/qa/review_llm_clip.py`, `scripts/qa/qa_llm_clip_batch.py`
+- Runtime LLM review uses one background queue/worker with one loaded Qwen3-VL reviewer; the detector loop submits suspected clips and continues.
+- YOLO pose uses native batch inference across the three synchronized camera frames. Do not split this into three same-GPU processes unless a measured multi-GPU/IO bottleneck justifies it.
 - Current 3D checkpoint: `checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth`
-- Default thresholds: low `0.40`, high `0.80`
+- Default review threshold: `0.40`
 
 Current best 3D classifier notes:
 
@@ -47,10 +49,12 @@ This project targets elderly-home cameras connected to community staff. Treat pr
 - Process camera streams locally where possible.
 - Do not continuously upload or persist full video streams.
 - Keep a rolling in-memory buffer on the client.
-- Send an immediate `suspected` event without video when `0.40 <= p_fall < 0.80`.
+- Send an immediate `suspected` event without video when `p_fall >= 0.40`; all such events go through Qwen3-VL review.
 - Export/share only the latest 90-frame raw clip when a suspected event needs review. Rolling buffer keeps 600 frames (~20s at 30 FPS); Qwen3-VL samples the clip with stride 10 and max 9 frames.
+- Do not emit fall/suspected events before at least 90 frames are buffered; evidence clips must be complete before LLM review or release.
 - Use the same `event_id` for initial suspected alert and final LLM update.
-- Direct `fall` events (`p_fall >= 0.80`) skip LLM by default.
+- The current roadshow policy does not use direct classifier-only fall alerts; LLM decides whether a suspected event becomes `fall`.
+- Dashboard playback fetches released clips via one `/clip-frames` request and plays the cached frames locally. Do not reintroduce per-frame HTTP polling for playback.
 
 ## Roadshow Commands
 
