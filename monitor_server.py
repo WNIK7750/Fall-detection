@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from contextlib import asynccontextmanager
 import json
 import os
 import sys
@@ -26,6 +27,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+# Uvicorn/asyncio can otherwise use the Proactor loop on Windows, which logs
+# noisy ConnectionResetError traces when browsers abort video range requests.
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -41,9 +47,32 @@ MAX_EVENTS = 200
 
 CLIPS_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Fall Detection Community Monitor")
 dashboard_clients: set[WebSocket] = set()
+event_clients: set[WebSocket] = set()
 events: list[dict[str, Any]] = []
+
+
+async def close_websockets() -> None:
+    clients = list(dashboard_clients | event_clients)
+    dashboard_clients.clear()
+    event_clients.clear()
+    if not clients:
+        return
+    await asyncio.gather(
+        *(ws.close(code=1001, reason="server shutdown") for ws in clients),
+        return_exceptions=True,
+    )
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    try:
+        yield
+    finally:
+        await close_websockets()
+
+
+app = FastAPI(title="Fall Detection Community Monitor", lifespan=lifespan)
 
 
 def now_iso() -> str:
@@ -201,6 +230,7 @@ async def dashboard_socket(ws: WebSocket) -> None:
 @app.websocket("/ws/events")
 async def event_socket(ws: WebSocket) -> None:
     await ws.accept()
+    event_clients.add(ws)
     await ws.send_text(json.dumps({"type": "ready", "message": "event socket connected"}))
     try:
         while True:
@@ -214,6 +244,8 @@ async def event_socket(ws: WebSocket) -> None:
             await ws.send_text(json.dumps({"type": "ack", "event_id": event["event_id"]}, ensure_ascii=False))
     except WebSocketDisconnect:
         pass
+    finally:
+        event_clients.discard(ws)
 
 
 app.mount("/clips", StaticFiles(directory=str(CLIPS_DIR), check_dir=False), name="clips")
@@ -227,9 +259,15 @@ def main() -> None:
     args = parser.parse_args()
 
     os.environ.setdefault("PYTHONUTF8", "1")
-    if sys.platform.startswith("win"):
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    uvicorn.run("monitor_server:app", host=args.host, port=args.port, reload=args.reload)
+    uvicorn_app = "monitor_server:app" if args.reload else app
+    uvicorn.run(
+        uvicorn_app,
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+        loop="asyncio",
+        timeout_graceful_shutdown=2,
+    )
 
 
 if __name__ == "__main__":
