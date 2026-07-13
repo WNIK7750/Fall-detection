@@ -61,6 +61,10 @@ One-command Windows roadshow:
 .\demo.ps1 -NoLLM
 ```
 
+`demo.ps1` is the formal roadshow entry point. It starts the monitor and the
+real `continuous_event_client.py` loop over synchronized MCFD cameras. Do not
+use scripted playmode or forced probabilities for the main roadshow path.
+
 Start monitor:
 
 ```bash
@@ -73,7 +77,7 @@ Open:
 http://127.0.0.1:8765/
 ```
 
-No-camera playmode, recommended for live roadshow:
+No-camera playmode, smoke-test only:
 
 ```bash
 python playmode_event_loop.py --source-video clips/s01_1050_90.mp4 --server-url ws://127.0.0.1:8765/ws/events
@@ -82,7 +86,7 @@ python playmode_event_loop.py --source-video clips/s01_1050_90.mp4 --server-url 
 Dataset-backed continuous client:
 
 ```bash
-python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-frame 100 --force-p-fall 0.35 --server-url ws://127.0.0.1:8765/ws/events --stop-after-event
+python continuous_event_client.py --roadshow-loop --start-near-fall --server-url ws://127.0.0.1:8765/ws/events
 ```
 
 Fast smoke test without LLM or WebSocket:

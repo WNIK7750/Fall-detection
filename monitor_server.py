@@ -23,10 +23,12 @@ from contextlib import asynccontextmanager
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+import cv2
 
 # Uvicorn/asyncio can otherwise use the Proactor loop on Windows, which logs
 # noisy ConnectionResetError traces when browsers abort video range requests.
@@ -35,7 +37,7 @@ if sys.platform.startswith("win"):
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 
@@ -108,10 +110,15 @@ def normalize_event(payload: dict[str, Any]) -> dict[str, Any]:
     event["llm_review"] = llm_review
 
     clip_path = event.get("clip_path")
-    if clip_path:
-        event["clip_url"] = clip_path_to_url(str(clip_path))
-    else:
-        event.setdefault("clip_url", None)
+    raw_clip_url = clip_path_to_url(str(clip_path)) if clip_path else None
+    event["_clip_url_raw"] = raw_clip_url
+    event.setdefault("video_released", event.get("status") == "fall")
+    event["clip_url"] = raw_clip_url if event.get("video_released") else None
+    event["clip_stream_url"] = (
+        f"/api/events/{event['event_id']}/clip-stream"
+        if raw_clip_url and event.get("video_released")
+        else None
+    )
 
     event.setdefault("handled", False)
     return event
@@ -153,6 +160,10 @@ async def add_event(payload: dict[str, Any]) -> dict[str, Any]:
     else:
         handled = existing.get("handled", False)
         handled_at = existing.get("handled_at")
+        video_released = existing.get("video_released", False)
+        incoming_video_released = incoming.get("video_released", False)
+        video_requested_at = existing.get("video_requested_at")
+        video_release_at = existing.get("video_release_at")
         first_timestamp = existing.get("timestamp")
         updated_at = incoming.get("timestamp", now_iso())
         existing.update(incoming)
@@ -160,6 +171,22 @@ async def add_event(payload: dict[str, Any]) -> dict[str, Any]:
             existing["timestamp"] = first_timestamp
         existing["updated_at"] = updated_at
         existing["handled"] = handled
+        existing["video_released"] = bool(
+            video_released
+            or incoming_video_released
+            or existing.get("status") == "fall"
+        )
+        if video_requested_at:
+            existing["video_requested_at"] = video_requested_at
+        if video_release_at:
+            existing["video_release_at"] = video_release_at
+        raw_clip_url = existing.get("_clip_url_raw")
+        existing["clip_url"] = raw_clip_url if existing.get("video_released") else None
+        existing["clip_stream_url"] = (
+            f"/api/events/{existing['event_id']}/clip-stream"
+            if raw_clip_url and existing.get("video_released")
+            else None
+        )
         if handled_at:
             existing["handled_at"] = handled_at
         event = existing
@@ -194,6 +221,85 @@ async def mark_handled(event_id: str) -> JSONResponse:
             await broadcast({"type": "handled", "event_id": event_id, "event": event})
             return JSONResponse({"ok": True, "event": event})
     return JSONResponse({"ok": False, "error": "event not found"}, status_code=404)
+
+
+@app.post("/api/events/{event_id}/request-video")
+async def request_video(event_id: str) -> JSONResponse:
+    for event in events:
+        if event.get("event_id") == event_id:
+            if not event.get("_clip_url_raw"):
+                return JSONResponse({"ok": False, "error": "clip not available"}, status_code=404)
+            now = datetime.now(timezone.utc).astimezone()
+            release_at = now + timedelta(seconds=30)
+            event["video_requested_at"] = now.isoformat(timespec="seconds")
+            event["video_release_at"] = release_at.isoformat(timespec="seconds")
+            await broadcast({"type": "event", "event": event})
+            return JSONResponse({"ok": True, "event": event})
+    return JSONResponse({"ok": False, "error": "event not found"}, status_code=404)
+
+
+@app.post("/api/events/{event_id}/release-video")
+async def release_video(event_id: str) -> JSONResponse:
+    for event in events:
+        if event.get("event_id") == event_id:
+            raw_clip_url = event.get("_clip_url_raw")
+            if not raw_clip_url:
+                return JSONResponse({"ok": False, "error": "clip not available"}, status_code=404)
+            event["video_released"] = True
+            event["clip_url"] = raw_clip_url
+            event["clip_stream_url"] = f"/api/events/{event_id}/clip-stream"
+            await broadcast({"type": "event", "event": event})
+            return JSONResponse({"ok": True, "event": event})
+    return JSONResponse({"ok": False, "error": "event not found"}, status_code=404)
+
+
+def event_clip_path(event_id: str) -> Path | None:
+    for event in events:
+        if event.get("event_id") != event_id:
+            continue
+        clip_path = event.get("clip_path")
+        if not clip_path:
+            return None
+        path = Path(str(clip_path))
+        if not path.is_absolute():
+            path = BASE_DIR / path
+        try:
+            path.resolve().relative_to(CLIPS_DIR.resolve())
+        except (OSError, ValueError):
+            return None
+        return path
+    return None
+
+
+def mjpeg_frames(path: Path):
+    cap = cv2.VideoCapture(str(path))
+    try:
+        while cap.isOpened():
+            ok, frame = cap.read()
+            if not ok:
+                break
+            ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
+            if not ok:
+                continue
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n"
+                + encoded.tobytes()
+                + b"\r\n"
+            )
+    finally:
+        cap.release()
+
+
+@app.get("/api/events/{event_id}/clip-stream")
+async def clip_stream(event_id: str):
+    event = next((item for item in events if item.get("event_id") == event_id), None)
+    if not event or not event.get("video_released"):
+        return Response(status_code=403)
+    path = event_clip_path(event_id)
+    if path is None or not path.exists():
+        return Response(status_code=404)
+    return StreamingResponse(mjpeg_frames(path), media_type="multipart/x-mixed-replace; boundary=frame")
 
 
 @app.get("/favicon.ico")

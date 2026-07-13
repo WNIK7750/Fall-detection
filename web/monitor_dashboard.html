@@ -176,13 +176,32 @@
       border-left-color: var(--handled);
     }
 
-    video, .empty-video {
+    .video-button, video, .clip-preview, .empty-video {
       width: 100%;
       aspect-ratio: 16 / 9;
       background: #111827;
       border-radius: 6px;
       object-fit: contain;
       display: block;
+    }
+
+    .video-button {
+      display: grid;
+      place-items: center;
+      color: #e5e7eb;
+      text-align: center;
+      padding: 10px;
+    }
+
+    .video-button strong {
+      display: block;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    .video-button span {
+      color: #cbd5e1;
+      font-size: 12px;
     }
 
     .empty-video {
@@ -217,6 +236,7 @@
     }
 
     .badge.fall { background: var(--fall); }
+    .badge.normal { background: var(--normal); }
     .badge.handled { background: var(--handled); }
 
     .event-title {
@@ -282,7 +302,9 @@
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
-      overflow: hidden;
+      max-height: 142px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
 
     .latest-row {
@@ -305,6 +327,55 @@
     .latest-time {
       color: var(--muted);
       text-align: right;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: rgba(15, 23, 42, 0.72);
+      z-index: 50;
+    }
+
+    .modal.open { display: grid; }
+
+    .modal-panel {
+      width: min(1120px, 96vw);
+      max-height: 92vh;
+      background: var(--panel);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.35);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .modal-title {
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .modal-body {
+      padding: 14px;
+      background: #0f172a;
+    }
+
+    .modal-body img,
+    .modal-body video {
+      width: 100%;
+      max-height: 76vh;
+      object-fit: contain;
+      background: #000000;
+      border-radius: 6px;
     }
 
     @media (max-width: 900px) {
@@ -382,6 +453,16 @@
     </section>
   </main>
 
+  <div id="videoModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div id="modalTitle" class="modal-title">Event video</div>
+        <button id="modalClose">Close</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
   <script>
     const suspectedEventsEl = document.getElementById('suspectedEvents');
     const fallEventsEl = document.getElementById('fallEvents');
@@ -391,6 +472,10 @@
     const dotEl = document.getElementById('dot');
     const connectionTextEl = document.getElementById('connectionText');
     const reloadButton = document.getElementById('reloadButton');
+    const videoModal = document.getElementById('videoModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+    const modalClose = document.getElementById('modalClose');
     const counts = {
       total: document.getElementById('totalCount'),
       open: document.getElementById('openCount'),
@@ -426,6 +511,11 @@
         events.unshift(event);
       }
       render();
+    }
+
+    function canReleaseVideo(event) {
+      if (event.video_released || !event.video_release_at) return false;
+      return Date.now() >= Date.parse(event.video_release_at);
     }
 
     function render() {
@@ -478,13 +568,9 @@
         const llm = event.llm_review || {};
         const classifier = event.classifier || {};
         const handled = event.handled ? ' handled' : '';
-        const clip = event.clip_url
-          ? `<video src="${escapeHtml(event.clip_url)}" controls muted preload="metadata"></video>`
-          : '<div class="empty-video">No clip</div>';
+        const clip = renderVideoPane(event);
         const handledBadge = event.handled ? '<span class="badge handled">Handled</span>' : '';
-        const markButton = event.handled
-          ? '<button disabled>Handled</button>'
-          : `<button class="primary" data-handle="${escapeHtml(event.event_id)}">Mark handled</button>`;
+        const actions = renderActions(event);
 
         return `
           <article class="event ${escapeHtml(status)}${handled}">
@@ -507,11 +593,40 @@
             </div>
             <div class="event-actions">
               <div class="probability">3D classifier p_fall <strong>${formatProb(classifier.p_fall)}</strong></div>
-              ${markButton}
+              ${actions}
             </div>
           </article>
         `;
       }).join('');
+    }
+
+    function renderVideoPane(event) {
+      if (event.clip_stream_url || event.clip_url) {
+        return `
+          <button class="video-button" data-open-video="${escapeHtml(event.event_id)}">
+            <span><strong>Open video</strong>Click to view event clip</span>
+          </button>
+        `;
+      }
+      return '<div class="empty-video">No video released</div>';
+    }
+
+    function renderActions(event) {
+      if (event.handled) return '<button disabled>Handled</button>';
+      if (event.status === 'fall') {
+        return `<button class="primary" data-handle="${escapeHtml(event.event_id)}">Mark handled</button>`;
+      }
+      if (!event.clip_url && !event.clip_stream_url && event._clip_url_raw) {
+        if (event.video_release_at) {
+          const remaining = Math.max(0, Math.ceil((Date.parse(event.video_release_at) - Date.now()) / 1000));
+          if (remaining > 0) {
+            return `<button disabled>Video in ${remaining}s</button>`;
+          }
+          return `<button class="primary" data-release-video="${escapeHtml(event.event_id)}">View video</button>`;
+        }
+        return `<button class="primary" data-request-video="${escapeHtml(event.event_id)}">Request video</button>`;
+      }
+      return `<button class="primary" data-handle="${escapeHtml(event.event_id)}">Mark handled</button>`;
     }
 
     async function reloadEvents() {
@@ -523,6 +638,41 @@
 
     async function markHandled(eventId) {
       await fetch(`/api/events/${encodeURIComponent(eventId)}/handled`, { method: 'POST' });
+    }
+
+    async function requestVideo(eventId) {
+      await fetch(`/api/events/${encodeURIComponent(eventId)}/request-video`, { method: 'POST' });
+    }
+
+    async function releaseVideo(eventId) {
+      const response = await fetch(`/api/events/${encodeURIComponent(eventId)}/release-video`, { method: 'POST' });
+      const data = await response.json();
+      if (data.event) {
+        upsertEvent(data.event);
+        openVideo(data.event.event_id);
+      }
+    }
+
+    function openVideo(eventId) {
+      const event = events.find((item) => item.event_id === eventId);
+      if (!event) return;
+      const streamUrl = event.clip_stream_url;
+      const clipUrl = event.clip_url;
+      if (!streamUrl && !clipUrl) return;
+      modalTitle.textContent = `${event.status || 'event'} · ${event.address || event.event_id}`;
+      if (streamUrl) {
+        modalBody.innerHTML = `<img src="${escapeHtml(streamUrl)}" alt="event video stream">`;
+      } else {
+        modalBody.innerHTML = `<video src="${escapeHtml(clipUrl)}" controls autoplay muted playsinline></video>`;
+      }
+      videoModal.classList.add('open');
+      videoModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeVideo() {
+      videoModal.classList.remove('open');
+      videoModal.setAttribute('aria-hidden', 'true');
+      modalBody.innerHTML = '';
     }
 
     function connect() {
@@ -551,9 +701,26 @@
     document.addEventListener('click', (event) => {
       const button = event.target.closest('[data-handle]');
       if (button) markHandled(button.dataset.handle);
+      const requestButton = event.target.closest('[data-request-video]');
+      if (requestButton) requestVideo(requestButton.dataset.requestVideo);
+      const releaseButton = event.target.closest('[data-release-video]');
+      if (releaseButton) releaseVideo(releaseButton.dataset.releaseVideo);
+      const openButton = event.target.closest('[data-open-video]');
+      if (openButton) openVideo(openButton.dataset.openVideo);
+    });
+
+    modalClose.addEventListener('click', closeVideo);
+    videoModal.addEventListener('click', (event) => {
+      if (event.target === videoModal) closeVideo();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeVideo();
     });
 
     reloadButton.addEventListener('click', reloadEvents);
+    setInterval(() => {
+      if (events.some(canReleaseVideo)) render();
+    }, 1000);
     reloadEvents().catch(() => {});
     connect();
   </script>

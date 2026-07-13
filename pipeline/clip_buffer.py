@@ -47,7 +47,7 @@ class RollingClipBuffer:
         return list(self._frames)[-frames:]
 
     def export_latest(self, output_path: str | Path, frames: int = 90, fps: float | None = None) -> str | None:
-        """Export latest N frames to an mp4. Returns path or None if unavailable."""
+        """Export latest N frames to a clip. Returns path or None if unavailable."""
         if not self.can_export(frames):
             return None
 
@@ -59,10 +59,7 @@ class RollingClipBuffer:
         output.parent.mkdir(parents=True, exist_ok=True)
 
         h, w = selected[0].image.shape[:2]
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(str(output), fourcc, fps or self.fps, (w, h))
-        if not writer.isOpened():
-            raise RuntimeError(f"Cannot open output video: {output}")
+        writer = _open_video_writer(output, fps or self.fps, (w, h))
         try:
             for item in selected:
                 frame = item.image
@@ -73,3 +70,18 @@ class RollingClipBuffer:
             writer.release()
 
         return str(output)
+
+
+def _open_video_writer(output: Path, fps: float, size: tuple[int, int]) -> cv2.VideoWriter:
+    """Open a browser-friendly writer where available, then fall back to mp4v."""
+    candidates = [
+        ("avc1", output),
+        ("H264", output),
+        ("mp4v", output),
+    ]
+    for fourcc_name, path in candidates:
+        writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*fourcc_name), fps, size)
+        if writer.isOpened():
+            return writer
+        writer.release()
+    raise RuntimeError(f"Cannot open output video: {output}")

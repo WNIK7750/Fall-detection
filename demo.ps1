@@ -1,10 +1,8 @@
 param(
     [string]$HostName = "127.0.0.1",
     [int]$Port = 8765,
-    [string]$SourceVideo = "clips/s01_1050_90.mp4",
     [switch]$NoLLM,
-    [switch]$NoBrowser,
-    [switch]$NoRealtime
+    [switch]$NoBrowser
 )
 
 $ErrorActionPreference = "Stop"
@@ -47,19 +45,19 @@ try {
     }
 
     $ArgsList = @(
-        "playmode_event_loop.py",
-        "--source-video", $SourceVideo,
+        "continuous_event_client.py",
+        "--roadshow-loop",
+        "--start-near-fall",
+        "--pre-roll-frames", "180",
+        "--scenarios", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23",
         "--server-url", $ServerUrl,
-        "--stop-after-event"
+        "--log-every", "120"
     )
     if ($NoLLM) {
         $ArgsList += "--no-llm"
     }
-    if (-not $NoRealtime) {
-        $ArgsList += "--realtime"
-    }
 
-    Write-Host "Running playmode client..."
+    Write-Host "Running live dataset camera loop..."
     & $Python @ArgsList
     Write-Host ""
     Write-Host "Demo complete. Dashboard remains open while this script is running."

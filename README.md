@@ -36,7 +36,15 @@ Windows 下推荐直接运行：
 .\demo.ps1
 ```
 
-脚本会启动 `monitor_server.py`、打开 dashboard，并运行 `playmode_event_loop.py`。如果现场机器没有 Qwen3-VL GGUF，先用快速模式：
+脚本会启动 `monitor_server.py`、打开 dashboard，并运行 `continuous_event_client.py` 的真实数据集摄像头循环：
+
+- 三路 MCFD 视频按 `data_tuple3.csv` 对齐后作为虚拟摄像头输入。
+- YOLO/3D 重建/classifier 持续运行。
+- 每换一个 scenario 都会重置 tracker、平滑器、floor estimator 和 3D 状态。
+- Qwen3-VL 在客户端启动时加载一次，疑似事件发生时直接调用，不重复加载模型。
+- 一个 scenario 播完后自动随机切到下一个 scenario。
+
+如果现场机器没有 Qwen3-VL GGUF，先用无 LLM 模式验证摄像头循环和 dashboard：
 
 ```powershell
 .\demo.ps1 -NoLLM
@@ -58,7 +66,7 @@ Dashboard 通过 WebSocket 自动刷新；`Manual Sync` 只是断线或调试时
 
 ### 2. 无摄像头演示主循环
 
-这是最稳的路演方式，不需要真实摄像头，也不需要现场跑完整 YOLO/3D 链路：
+这是旧的脚本化演示方式，不需要真实摄像头，也不跑完整 YOLO/3D 链路。仅用于离线 smoke test，不作为正式路演主流程：
 
 ```bash
 python playmode_event_loop.py --source-video clips/s01_1050_90.mp4 --server-url ws://127.0.0.1:8765/ws/events
@@ -83,7 +91,7 @@ python playmode_event_loop.py --no-send --no-llm --source-video clips/s01_1050_9
 使用当前数据集视频模拟三路摄像头，跑真实 YOLO/3D/classifier 主循环：
 
 ```bash
-python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-frame 100 --force-p-fall 0.35 --server-url ws://127.0.0.1:8765/ws/events --stop-after-event
+python continuous_event_client.py --roadshow-loop --start-near-fall --server-url ws://127.0.0.1:8765/ws/events
 ```
 
 快速 smoke test：
@@ -91,6 +99,13 @@ python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-
 ```bash
 python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-frame 100 --force-p-fall 0.35 --no-llm --no-send --stop-after-event
 ```
+
+Dashboard event policy:
+
+- `fall`: immediately exports a clip and shows it in the Fall column.
+- `suspected`: first sends an alert without video, then exports a clip for local Qwen3-VL review.
+- LLM says fall: same `event_id` is updated to `fall`; the old suspected card disappears and the Fall card shows video.
+- LLM says not fall: same event stays in the Suspected column as manual review. Staff can click `Request video`; after 30 seconds the video preview is released for human review.
 
 ### 4. LLM clip 复核单测
 
