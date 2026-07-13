@@ -7,17 +7,19 @@ Strategy:
   - Uses undistorted frames for correct 3D triangulation.
 
 Usage:
-    python extract_dataset_3d.py              # full extraction
-    python extract_dataset_3d.py --fast       # skip normal windows (quick)
+    python scripts/training/extract_dataset_3d.py              # full extraction
+    python scripts/training/extract_dataset_3d.py --fast       # skip normal windows (quick)
 """
 
 import os
 import sys
 import argparse
 import time
+from pathlib import Path
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(__file__))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 from pipeline.video_reader import MCFDReader, load_annotations, find_fall_segments
 from pipeline.pose_inference import PoseDetector
 from pipeline.triangulation import Triangulator, KalmanSmoother
@@ -187,7 +189,7 @@ def main():
                         help="Skip a split if X.npy and y.npy already exist")
     args = parser.parse_args()
 
-    data_root = os.path.join(os.path.dirname(__file__), "dataset", "mcfd")
+    data_root = str(REPO_ROOT / "dataset" / "mcfd")
     camera_ids = [1, 4, 7]
 
     splits = SPLIT_PRESETS[args.split_preset]
@@ -204,7 +206,7 @@ def main():
     tri = Triangulator(DEFAULT_PROJECTIONS)
 
     for split_name, scenario_range in splits.items():
-        out_dir = os.path.join("features", "3d", split_name)
+        out_dir = str(REPO_ROOT / "features" / "3d" / split_name)
         x_path = os.path.join(out_dir, "X.npy")
         y_path = os.path.join(out_dir, "y.npy")
         if args.skip_existing and os.path.exists(x_path) and os.path.exists(y_path):
@@ -324,7 +326,7 @@ def main():
         print(f"  Saved {len(X_out)} windows ({pos} falls, {ratio}) → {out_dir}/ "
               f"in {elapsed/60:.1f} min")
 
-    print("\nDone. Next: python train_3d.py")
+    print("\nDone. Next: python scripts/training/train_3d.py")
 
 
 if __name__ == "__main__":

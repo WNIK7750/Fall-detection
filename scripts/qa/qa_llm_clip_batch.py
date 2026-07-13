@@ -6,16 +6,20 @@ for each provided clip. Dry-run mode validates decoding and contact-sheet
 sampling without loading model weights.
 
 Examples:
-    python qa_llm_clip_batch.py --videos clips/s01_1050_90.mp4 --dry-run
-    python qa_llm_clip_batch.py --videos clips/s01_1050_90.mp4 --output results/llm_qa/clip_batch.json
+    python scripts/qa/qa_llm_clip_batch.py --videos clips/s01_1050_90.mp4 --dry-run
+    python scripts/qa/qa_llm_clip_batch.py --videos clips/s01_1050_90.mp4 --output results/llm_qa/clip_batch.json
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 from pipeline.llm_reviewer import (
     LLMFallReviewer,
@@ -24,9 +28,8 @@ from pipeline.llm_reviewer import (
 )
 
 
-BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_MODEL = BASE_DIR / "models" / "llm" / "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
-DEFAULT_MMPROJ = BASE_DIR / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+DEFAULT_MODEL = REPO_ROOT / "models" / "llm" / "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
+DEFAULT_MMPROJ = REPO_ROOT / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
 
 
 def dry_run_video(video: str, frame_stride: int, max_frames: int, contact_sheet: bool) -> dict:

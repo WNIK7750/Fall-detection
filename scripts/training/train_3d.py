@@ -5,8 +5,8 @@ Uses BiLSTM+BiGRU+Attention architecture with Focal Loss + SMOTE balancing.
 Outputs binary model; 3-class decisions via dual thresholds at inference time.
 
 Usage:
-    python train_3d.py                          # full training
-    python train_3d.py --epochs 50 --lr 0.0005  # custom params
+    python scripts/training/train_3d.py                          # full training
+    python scripts/training/train_3d.py --epochs 50 --lr 0.0005  # custom params
 """
 
 import os
@@ -15,6 +15,7 @@ import json
 import argparse
 import random
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -25,7 +26,8 @@ from sklearn.metrics import classification_report, roc_auc_score, confusion_matr
 from imblearn.over_sampling import SMOTE
 import matplotlib.pyplot as plt
 
-sys.path.insert(0, os.path.dirname(__file__))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 from models.enhanced_lstm import EnhancedFallDetector
 from pipeline.classifier import FallClassifier
 
@@ -71,11 +73,11 @@ def train(args):
     print(f"Config: {vars(args)}")
 
     # Load data
-    feats_dir = os.path.join("features", "3d")
-    X_train = np.load(os.path.join(feats_dir, "train", "X.npy"))
-    y_train = np.load(os.path.join(feats_dir, "train", "y.npy"))
-    X_val = np.load(os.path.join(feats_dir, "val", "X.npy"))
-    y_val = np.load(os.path.join(feats_dir, "val", "y.npy"))
+    feats_dir = REPO_ROOT / "features" / "3d"
+    X_train = np.load(feats_dir / "train" / "X.npy")
+    y_train = np.load(feats_dir / "train" / "y.npy")
+    X_val = np.load(feats_dir / "val" / "X.npy")
+    y_val = np.load(feats_dir / "val" / "y.npy")
 
     N, F, T = X_train.shape
     print(f"\nData: train={N} val={len(y_val)}, shape=({F},{T}), "
@@ -97,9 +99,10 @@ def train(args):
     X_val_scaled = scaler.transform(X_val_2d).reshape(len(y_val), T, F)
 
     # Save scaler for inference
-    os.makedirs(os.path.join(feats_dir, "scaler"), exist_ok=True)
-    np.save(os.path.join(feats_dir, "scaler", "mean.npy"), scaler.mean_)
-    np.save(os.path.join(feats_dir, "scaler", "scale.npy"), scaler.scale_)
+    scaler_dir = feats_dir / "scaler"
+    scaler_dir.mkdir(parents=True, exist_ok=True)
+    np.save(scaler_dir / "mean.npy", scaler.mean_)
+    np.save(scaler_dir / "scale.npy", scaler.scale_)
 
     # SMOTE oversampling (flatten windows for SMOTE)
     if args.smote:
@@ -143,8 +146,8 @@ def train(args):
     history = {"train_loss": [], "val_loss": [], "val_f1": [], "val_auc": []}
     patience_counter = 0
     run_name = datetime.now().strftime("enhanced_3d_%Y%m%d_%H%M%S")
-    ckpt_dir = os.path.join("checkpoints", run_name)  # always set, even if no improvement
-    os.makedirs(ckpt_dir, exist_ok=True)
+    ckpt_dir = REPO_ROOT / "checkpoints" / run_name  # always set, even if no improvement
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(1, args.epochs + 1):
         # Train
@@ -217,7 +220,7 @@ def train(args):
                 "val_loss": val_loss_epoch,
                 "f1": f1,
                 "auc": auc,
-            }, os.path.join(ckpt_dir, "best_model.pth"))
+            }, ckpt_dir / "best_model.pth")
         else:
             patience_counter += 1
             if patience_counter >= args.patience:
@@ -225,12 +228,12 @@ def train(args):
                 break
 
     # Save history (always, even if model never improved)
-    with open(os.path.join(ckpt_dir, "history.json"), "w") as f:
+    with open(ckpt_dir / "history.json", "w") as f:
         json.dump(history, f, indent=2)
 
     # Save last checkpoint if no best was saved (model never improved)
-    best_path = os.path.join(ckpt_dir, "best_model.pth")
-    if not os.path.exists(best_path):
+    best_path = ckpt_dir / "best_model.pth"
+    if not best_path.exists():
         print("No improvement during training — saving last state")
         torch.save({
             "model_state_dict": model.state_dict(),
@@ -244,10 +247,10 @@ def train(args):
         }, best_path)
 
     # Test set evaluation
-    test_path = os.path.join(feats_dir, "test", "X.npy")
-    if os.path.exists(test_path) and os.path.getsize(test_path) > 128:
+    test_path = feats_dir / "test" / "X.npy"
+    if test_path.exists() and test_path.stat().st_size > 128:
         X_test = np.load(test_path)
-        y_test = np.load(os.path.join(feats_dir, "test", "y.npy"))
+        y_test = np.load(feats_dir / "test" / "y.npy")
         print(f"\n=== Test Set ({run_name}) ===")
         print(f"  Samples: {len(y_test)}, fall ratio: {y_test.mean():.1%}")
 

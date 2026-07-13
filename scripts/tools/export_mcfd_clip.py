@@ -5,18 +5,20 @@ This is a QA/tooling script only. Production rolling-buffer export should live
 in the camera-control layer.
 
 Example:
-    python export_mcfd_clip.py --scenario 1 --start-frame 1050 --frames 90 --output clips/s01_1050_90.mp4
+    python scripts/tools/export_mcfd_clip.py --scenario 1 --start-frame 1050 --frames 90 --output clips/s01_1050_90.mp4
 """
 
 import argparse
+import sys
 from pathlib import Path
 
 import cv2
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+
 from pipeline.llm_reviewer import make_multiview_collage
 from pipeline.video_reader import MCFDReader
-
-
-BASE_DIR = Path(__file__).resolve().parent
 
 
 def main():
@@ -30,7 +32,7 @@ def main():
                         help="Output clip FPS; frame content is sampled from MCFD reference timeline")
     args = parser.parse_args()
 
-    data_root = BASE_DIR / "dataset" / "mcfd"
+    data_root = REPO_ROOT / "dataset" / "mcfd"
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
 

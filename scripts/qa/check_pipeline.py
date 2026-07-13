@@ -5,19 +5,21 @@ Reads a few frames from MCFD scenario 1, runs YOLO batch inference on 3 views,
 prints keypoint summary and saves a debug visualization image.
 
 Usage:
-    python check_pipeline.py
+    python scripts/qa/check_pipeline.py
 """
 
 import os
 import sys
+from pathlib import Path
 import cv2
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(__file__))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 from pipeline.video_reader import MCFDReader, load_annotations, find_fall_segments
 from pipeline.pose_inference import PoseDetector, MultiViewPoseVisualizer
 
-ROOT = os.path.join(os.path.dirname(__file__), "dataset", "mcfd")
+ROOT = str(REPO_ROOT / "dataset" / "mcfd")
 
 def main():
     # 1. Check annotations
@@ -67,7 +69,7 @@ def main():
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 vis_frames.append(vis)
             combined = np.hstack(vis_frames)
-            out_path = os.path.join(os.path.dirname(__file__), "results", "debug_pose.png")
+            out_path = str(REPO_ROOT / "results" / "debug_pose.png")
             os.makedirs(os.path.dirname(out_path), exist_ok=True)
             cv2.imwrite(out_path, combined)
             print(f"Saved: {out_path}")

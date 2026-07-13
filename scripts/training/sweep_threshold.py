@@ -2,6 +2,8 @@
 
 import argparse
 import os
+import sys
+from pathlib import Path
 
 import numpy as np
 from sklearn.metrics import (
@@ -10,11 +12,14 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+
 from pipeline.classifier import FallClassifier
 
 
 DEFAULT_CHECKPOINT = os.path.join(
-    "checkpoints",
+    str(REPO_ROOT / "checkpoints"),
     "archive",
     "enhanced_3d_20260712_185406",
     "best_model.pth",
@@ -36,7 +41,7 @@ def main():
     parser = argparse.ArgumentParser(description="Sweep thresholds for 3D fall checkpoint")
     parser.add_argument("--checkpoint", default=DEFAULT_CHECKPOINT)
     parser.add_argument("--split", default="test", choices=["train", "val", "test"])
-    parser.add_argument("--features-dir", default=os.path.join("features", "3d"))
+    parser.add_argument("--features-dir", default=str(REPO_ROOT / "features" / "3d"))
     parser.add_argument("--device", default="cuda")
     parser.add_argument(
         "--thresholds",

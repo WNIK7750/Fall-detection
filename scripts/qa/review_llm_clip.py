@@ -7,19 +7,22 @@ Boundary:
     model whether the motion shows a fall.
 
 Example:
-    python review_llm_clip.py --video clips/event_001.mp4
+    python scripts/qa/review_llm_clip.py --video clips/event_001.mp4
 """
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 from pipeline.llm_reviewer import LLMFallReviewer
 
 
-BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_MODEL = BASE_DIR / "models" / "llm" / "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
-DEFAULT_MMPROJ = BASE_DIR / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+DEFAULT_MODEL = REPO_ROOT / "models" / "llm" / "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
+DEFAULT_MMPROJ = REPO_ROOT / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
 
 
 def main():

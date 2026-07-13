@@ -23,9 +23,24 @@
 - `suspected` 第一时间只发送不含视频的告警和 3D classifier probability。
 - 只有需要复核时才从内存 rolling buffer 导出最近 90 帧短片段。
 - LLM 复核完成后，用同一个 `event_id` 更新事件状态。
-- 数据集视频、LLM GGUF 权重、生成 clips、生成 features 不进入 Git。
+- 数据集视频、LLM GGUF 权重、生成 clips 不进入 Git。
+- 当前 `features/3d/` 体积很小，保留在 Git 中用于复现阈值扫描和训练结果；演示运行不依赖它。
 
 ## Roadshow Demo
+
+### 一键 PowerShell 演示
+
+Windows 下推荐直接运行：
+
+```powershell
+.\demo.ps1
+```
+
+脚本会启动 `monitor_server.py`、打开 dashboard，并运行 `playmode_event_loop.py`。如果现场机器没有 Qwen3-VL GGUF，先用快速模式：
+
+```powershell
+.\demo.ps1 -NoLLM
+```
 
 ### 1. 启动监控端
 
@@ -80,8 +95,8 @@ python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-
 ### 4. LLM clip 复核单测
 
 ```bash
-python review_llm_clip.py --video clips/s01_1050_90.mp4
-python qa_llm_clip_batch.py --videos clips/s01_1050_90.mp4 clips/s01_0000_90_normal.mp4
+python scripts/qa/review_llm_clip.py --video clips/s01_1050_90.mp4
+python scripts/qa/qa_llm_clip_batch.py --videos clips/s01_1050_90.mp4 clips/s01_0000_90_normal.mp4
 ```
 
 ## Model And Thresholds
@@ -115,41 +130,57 @@ pip install -r requirements.txt
 
 Important local artifacts not stored in Git:
 
-- `dataset/mcfd/` - MCFD videos
-- `models/llm/*.gguf` - Qwen3-VL model and mmproj files
-- `features/3d/` - generated 3D features
+- `dataset/mcfd/` - MCFD videos, from Kaggle: <https://www.kaggle.com/datasets/soumicksarker/multiple-cameras-fall-dataset>
+- `models/llm/*.gguf` - Qwen3-VL model and mmproj files, from ModelScope: <https://www.modelscope.cn/models/Qwen/Qwen3-VL-4B-Instruct-GGUF/files>
 - `clips/` - generated event clips and QA clips
+
+Expected local layout:
+
+```text
+dataset/mcfd/dataset/chute01/cam1.avi
+dataset/mcfd/dataset/chute01/cam4.avi
+dataset/mcfd/dataset/chute01/cam7.avi
+models/llm/Qwen3VL-4B-Instruct-Q4_K_M.gguf
+models/llm/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf
+```
+
+`features/3d/` contains generated 3D feature arrays and scaler files for training and threshold sweep:
+
+- It is not needed for the normal roadshow path (`demo.ps1`, `playmode_event_loop.py`, `continuous_event_client.py`).
+- It is needed for `scripts/training/train_3d.py` and `scripts/training/sweep_threshold.py`.
+- It does not introduce runtime randomness into the demo. The roadshow uses the archived checkpoint; the scaler is embedded in that checkpoint. Regenerating features can change future training results, so the current small 3D feature set is kept in Git for reproducibility.
 
 Small model artifacts stored in Git:
 
 - `yolov8n-pose.pt`
 - `checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth`
 - `checkpoints/archive/enhanced_3d_20260712_185406/history.json`
+- `features/3d/{train,val,test,scaler}/`
 
 ## Useful Commands
 
 Extract 3D dataset features:
 
 ```bash
-python extract_dataset_3d.py --device cuda --yolo-batch 32 --time-batch 64 --min-quality 0.15 --max-normal 300
+python scripts/training/extract_dataset_3d.py --device cuda --yolo-batch 32 --time-batch 64 --min-quality 0.15 --max-normal 300
 ```
 
 Train 3D classifier:
 
 ```bash
-python train_3d.py --seed 42 --no-smote
+python scripts/training/train_3d.py --seed 42 --no-smote
 ```
 
 Sweep thresholds:
 
 ```bash
-python sweep_threshold.py --split test --device cuda
+python scripts/training/sweep_threshold.py --split test --device cuda
 ```
 
 OpenCV multiview visual demo:
 
 ```bash
-python demo_multiview.py --scenario 1
+python scripts/demo/demo_multiview.py --scenario 1
 ```
 
 ## Key Files
@@ -168,6 +199,10 @@ python demo_multiview.py --scenario 1
 | `pipeline/features_3d.py` | 3D feature engineering |
 | `pipeline/classifier.py` | 3D fall classifier wrapper |
 | `pipeline/llm_reviewer.py` | Qwen3-VL clip/image review |
+| `scripts/training/` | Feature extraction, training, threshold sweep |
+| `scripts/qa/` | LLM and pose QA helpers |
+| `scripts/demo/` | Visual/manual demo helpers |
+| `scripts/tools/` | Dataset clip export and utility scripts |
 
 ## Demo Boundaries
 

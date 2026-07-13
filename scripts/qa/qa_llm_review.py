@@ -6,24 +6,27 @@ person is falling. It is intentionally independent from the 3D classifier so
 we can validate the LLM before wiring it into the suspected-fall path.
 
 Examples:
-    python qa_llm_review.py --scenario 1 --kind both
-    python qa_llm_review.py --scenario 1 --kind fall --frame 1106
+    python scripts/qa/qa_llm_review.py --scenario 1 --kind both
+    python scripts/qa/qa_llm_review.py --scenario 1 --kind fall --frame 1106
 """
 
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 import cv2
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 from pipeline.llm_reviewer import LLMFallReviewer, make_multiview_collage
 from pipeline.video_reader import MCFDReader, find_fall_segments, load_annotations
 
 
-BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_MODEL = BASE_DIR / "models" / "llm" / "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
-DEFAULT_MMPROJ = BASE_DIR / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
+DEFAULT_MODEL = REPO_ROOT / "models" / "llm" / "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
+DEFAULT_MMPROJ = REPO_ROOT / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf"
 
 
 def _inside_any(frame: int, segments: list[tuple[int, int]]) -> bool:
@@ -99,7 +102,7 @@ def _collect_keyframes(
 
 
 def _run_case(args, reviewer: LLMFallReviewer, kind: str) -> dict:
-    data_root = os.path.join(BASE_DIR, "dataset", "mcfd")
+    data_root = str(REPO_ROOT / "dataset" / "mcfd")
     ref_cam = args.cameras[0]
     center_view = min(max(args.center_view, 0), len(args.cameras) - 1)
     frame = _choose_frame(data_root, args.scenario, kind, ref_cam, args.frame)

@@ -3,11 +3,16 @@
 import argparse
 import os
 import random
+import sys
+from pathlib import Path
 
 import cv2
 import numpy as np
 
-from demo_multiview import draw_3d_skeleton
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.demo.demo_multiview import draw_3d_skeleton
 from pipeline.calibration import get_projections, undistort_keypoints
 from pipeline.pose_inference import MultiViewPoseVisualizer, PoseDetector
 from pipeline.triangulation import Triangulator
@@ -81,7 +86,7 @@ def render_sample(
 
 def main():
     parser = argparse.ArgumentParser(description="Export sampled 2D/3D pose QA images")
-    parser.add_argument("--data-root", default=os.path.join("dataset", "mcfd"))
+    parser.add_argument("--data-root", default=str(REPO_ROOT / "dataset" / "mcfd"))
     parser.add_argument("--scenario", type=int, default=1)
     parser.add_argument("--cameras", type=int, nargs="+", default=[1, 4, 7])
     parser.add_argument("--frames", default=None, help="Comma-separated reference-camera frames")
@@ -89,7 +94,7 @@ def main():
     parser.add_argument("--normal-samples", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default=None)
-    parser.add_argument("--out-dir", default=os.path.join("results", "qa_pose_3d"))
+    parser.add_argument("--out-dir", default=str(REPO_ROOT / "results" / "qa_pose_3d"))
     args = parser.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)

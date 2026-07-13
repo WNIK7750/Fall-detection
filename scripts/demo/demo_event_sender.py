@@ -5,7 +5,7 @@ This uses only the Python standard library so it can run even when no WebSocket
 client package is installed.
 
 Run:
-    python demo_event_sender.py --clip clips/s01_1050_90.mp4
+    python scripts/demo/demo_event_sender.py --clip clips/s01_1050_90.mp4
 """
 
 from __future__ import annotations

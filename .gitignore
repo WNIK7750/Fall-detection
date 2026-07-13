@@ -31,8 +31,8 @@ results/qa_pose_3d/
 results/llm_qa/
 clips/
 
-# Generated 3D features (.npy files, ~MBs)
-features/3d/
+# Backup 3D feature snapshots
+features/3d/*.bak/
 
 # New training checkpoints (large .pth files)
 checkpoints/enhanced_3d_*/

@@ -29,7 +29,7 @@ All P0-P3 roadshow tasks are implemented.
 - No-camera playmode: `playmode_event_loop.py`
 - Monitor server: `monitor_server.py`
 - Dashboard: `web/monitor_dashboard.html`
-- LLM clip review: `review_llm_clip.py`, `qa_llm_clip_batch.py`
+- LLM clip review: `scripts/qa/review_llm_clip.py`, `scripts/qa/qa_llm_clip_batch.py`
 - Current 3D checkpoint: `checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth`
 - Default thresholds: low `0.30`, high `0.40`
 
@@ -53,6 +53,13 @@ This project targets elderly-home cameras connected to community staff. Treat pr
 - Direct `fall` events (`p_fall >= 0.40`) skip LLM by default.
 
 ## Roadshow Commands
+
+One-command Windows roadshow:
+
+```powershell
+.\demo.ps1
+.\demo.ps1 -NoLLM
+```
 
 Start monitor:
 
@@ -87,16 +94,16 @@ python continuous_event_client.py --scenario 1 --max-frames 120 --force-trigger-
 LLM clip QA:
 
 ```bash
-python review_llm_clip.py --video clips/s01_1050_90.mp4
-python qa_llm_clip_batch.py --videos clips/s01_1050_90.mp4 clips/s01_0000_90_normal.mp4
+python scripts/qa/review_llm_clip.py --video clips/s01_1050_90.mp4
+python scripts/qa/qa_llm_clip_batch.py --videos clips/s01_1050_90.mp4 clips/s01_0000_90_normal.mp4
 ```
 
 3D extraction / training / threshold sweep:
 
 ```bash
-python extract_dataset_3d.py --device cuda --yolo-batch 32 --time-batch 64 --min-quality 0.15 --max-normal 300
-python train_3d.py --seed 42 --no-smote
-python sweep_threshold.py --split test --device cuda
+python scripts/training/extract_dataset_3d.py --device cuda --yolo-batch 32 --time-batch 64 --min-quality 0.15 --max-normal 300
+python scripts/training/train_3d.py --seed 42 --no-smote
+python scripts/training/sweep_threshold.py --split test --device cuda
 ```
 
 ## Important Files
@@ -118,6 +125,10 @@ python sweep_threshold.py --split test --device cuda
 | `pipeline/features_3d.py` | 10-D 3D feature extraction |
 | `pipeline/classifier.py` | 3D classifier wrapper and heuristic fallback |
 | `pipeline/llm_reviewer.py` | Qwen3-VL review logic |
+| `scripts/training/` | Feature extraction, training, threshold sweep |
+| `scripts/qa/` | LLM and pose QA helpers |
+| `scripts/demo/` | Visual/manual demo helpers |
+| `scripts/tools/` | Dataset clip export and utility scripts |
 | `checkpoints/archive/enhanced_3d_20260712_185406/` | Current shipped 3D checkpoint |
 
 ## Local Artifacts And Git Hygiene
@@ -126,7 +137,6 @@ Do not commit:
 
 - `dataset/mcfd/`
 - `models/llm/*.gguf`
-- `features/3d/`
 - `clips/`
 - `results/llm_qa/`
 - `checkpoints/enhanced_3d_*`
@@ -136,6 +146,7 @@ Commit and keep:
 - `yolov8n-pose.pt`
 - `checkpoints/archive/enhanced_3d_20260712_185406/best_model.pth`
 - `checkpoints/archive/enhanced_3d_20260712_185406/history.json`
+- `features/3d/{train,val,test,scaler}/`
 
 ## Demo Boundaries
 

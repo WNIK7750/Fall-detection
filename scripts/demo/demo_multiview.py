@@ -5,13 +5,13 @@ Modules: YOLO → Triangulation → 3D Features → Classifier → LLM Review �
 
 Usage:
     # Visual demo (OpenCV windows)
-    python demo_multiview.py --scenario 1
+    python scripts/demo/demo_multiview.py --scenario 1
 
     # With LLM review enabled
-    python demo_multiview.py --scenario 4 --llm
+    python scripts/demo/demo_multiview.py --scenario 4 --llm
 
     # Save output video
-    python demo_multiview.py --scenario 1 --output demo_output.avi
+    python scripts/demo/demo_multiview.py --scenario 1 --output results/demo_output.avi
 
 Controls (in OpenCV window):
     q / ESC : quit
@@ -24,11 +24,13 @@ import sys
 import argparse
 import time
 from collections import deque
+from pathlib import Path
 
 import cv2
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(__file__))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 from pipeline.video_reader import MCFDReader, load_annotations, find_fall_segments
 from pipeline.pose_inference import PoseDetector, MultiViewPoseVisualizer, MultiPersonTracker
@@ -38,9 +40,8 @@ from pipeline.classifier import FallClassifier, HeuristicClassifier
 from pipeline.llm_reviewer import LLMFallReviewer, make_multiview_collage
 from pipeline.calibration import get_projections, undistort_keypoints
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_3D_CHECKPOINT = os.path.join(
-    BASE_DIR,
+    str(REPO_ROOT),
     "checkpoints",
     "archive",
     "enhanced_3d_20260712_185406",
@@ -147,7 +148,7 @@ def build_llm_context_collage(
 
 
 def run_demo(args):
-    data_root = os.path.join(os.path.dirname(__file__), "dataset", "mcfd")
+    data_root = str(REPO_ROOT / "dataset" / "mcfd")
     camera_ids = args.cameras or [1, 4, 7]
 
     # Load annotations for ground-truth labels
@@ -185,9 +186,8 @@ def run_demo(args):
     # LLM Reviewer (optional)
     reviewer = None
     if args.llm:
-        base = os.path.dirname(__file__)
-        model_path = os.path.join(base, "models", "llm", "Qwen3VL-4B-Instruct-Q4_K_M.gguf")
-        mmproj_path = os.path.join(base, "models", "llm", "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf")
+        model_path = str(REPO_ROOT / "models" / "llm" / "Qwen3VL-4B-Instruct-Q4_K_M.gguf")
+        mmproj_path = str(REPO_ROOT / "models" / "llm" / "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf")
         print("Loading LLM reviewer...")
         reviewer = LLMFallReviewer(model_path, mmproj_path, n_gpu_layers=-1)
 
